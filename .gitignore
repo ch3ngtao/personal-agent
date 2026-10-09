@@ -24,11 +24,18 @@ __pycache__/
 .env.*
 !.env.example
 
+# 部署配置与本地导出的镜像包（含服务器地址，不要提交）
+deploy.conf
+/ch3ngtao-images.tgz
+
 # Local model / data caches（限定仓库根目录，避免误伤 frontend/src/data 之类的源码目录）
 /data/
 /models/
 /.cache/
 /hf_cache/
+
+# RAG 索引缓存（backend/.cache/，由 PDF 自动重建）
+.cache/
 
 # IDE / editor
 .idea/

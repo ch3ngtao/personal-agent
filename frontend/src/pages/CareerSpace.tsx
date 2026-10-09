@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ApiOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
 import ApiDemoDrawer from '../components/ApiDemoDrawer'
+import ChatWidget from '../components/chat/ChatWidget'
 import DatabaseSection, { type DatabaseRow } from '../components/notion/DatabaseSection'
 import DetailDrawer from '../components/notion/DetailDrawer'
 import {
@@ -158,6 +159,7 @@ export default function CareerSpace() {
 
       <DetailDrawer detail={detail} onClose={() => setDetail(null)} />
       <ApiDemoDrawer open={apiOpen} onClose={() => setApiOpen(false)} />
+      <ChatWidget />
     </div>
   )
 }

@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1
+
+# uv 的官方镜像在 ghcr.io，国内服务器拉取可能极慢（实测 20MB 要 20 多分钟）。
+# 可在根目录 .env 里改 UV_IMAGE 走镜像加速，例如：
+#   ghcr.m.daocloud.io/astral-sh/uv:latest
+#   ghcr.nju.edu.cn/astral-sh/uv:latest
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
+FROM ${UV_IMAGE} AS uv
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -10,7 +18,7 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/models
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 WORKDIR /app
 

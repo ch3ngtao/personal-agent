@@ -38,6 +38,59 @@ export interface ChatResponse {
   usage: Record<string, unknown> | null
 }
 
+/** 简历 FAQ（RAG）召回的一个片段。 */
+export interface RagSource {
+  index: number
+  content: string
+  page: number | null
+  score: number
+  vector_score: number | null
+}
+
+/** GET /api/faq/status：索引与模型配置状态。 */
+export interface FaqStatusResponse {
+  ready: boolean
+  building: boolean
+  loaded_from_cache: boolean
+  pdf_name: string | null
+  pages: number
+  chunks: number
+  embedding_model: string
+  embedding_dim: number
+  vector_store: string
+  hybrid_search: boolean
+  built_at: string | null
+  llm_model: string
+  llm_configured: boolean
+  error: string | null
+}
+
+/** 后端判定这次问答走哪条链路：faq = 依据简历回答，chat = 转普通对话。 */
+export type RagAnswerMode = 'faq' | 'chat'
+
+/** POST /api/faq/ask：带简历片段的问答结果。 */
+export interface FaqAskResponse {
+  model: string
+  question: string
+  answer: string
+  mode: RagAnswerMode
+  sources: RagSource[]
+  usage: Record<string, unknown> | null
+}
+
+/** FAQ 流式事件：先给命中的简历片段，再逐段推送答案。 */
+export type FaqStreamEvent =
+  | { type: 'sources'; model: string | null; mode: RagAnswerMode; sources: RagSource[] }
+  | { type: 'delta'; content: string }
+
+interface SsePayload {
+  content?: string
+  error?: string
+  model?: string
+  mode?: RagAnswerMode
+  sources?: RagSource[]
+}
+
 async function readError(response: Response): Promise<string> {
   try {
     const data = (await response.json()) as { detail?: unknown }
@@ -61,22 +114,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
-/** 解析 SSE 流，逐段产出文本增量。 */
-async function* chatStream(
-  messages: ChatMessage[],
-  signal?: AbortSignal,
-): AsyncGenerator<string, void, unknown> {
-  const response = await fetch(`${BASE_URL}/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, stream: true }),
-    signal,
-  })
-
-  if (!response.ok || !response.body) {
-    throw new Error(await readError(response))
+/** 解析 SSE 响应，逐个产出 data: 后面的 JSON 负载。 */
+async function* parseSse<T>(response: Response): AsyncGenerator<T, void, unknown> {
+  if (!response.body) {
+    throw new Error('响应没有携带内容流')
   }
-
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -95,16 +137,70 @@ async function* chatStream(
         const raw = line.slice(5).trim()
         if (!raw || raw === '[DONE]') continue
 
-        let payload: { content?: string; error?: string }
         try {
-          payload = JSON.parse(raw) as { content?: string; error?: string }
+          yield JSON.parse(raw) as T
         } catch {
           continue
         }
-
-        if (payload.error) throw new Error(payload.error)
-        if (payload.content) yield payload.content
       }
+    }
+  }
+}
+
+/** DeepSeek 对话（SSE 流式），逐段产出文本增量。 */
+async function* chatStream(
+  messages: ChatMessage[],
+  signal?: AbortSignal,
+): AsyncGenerator<string, void, unknown> {
+  const response = await fetch(`${BASE_URL}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, stream: true }),
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(await readError(response))
+  }
+
+  for await (const payload of parseSse<SsePayload>(response)) {
+    if (payload.error) throw new Error(payload.error)
+    if (payload.content) yield payload.content
+  }
+}
+
+/** 简历 FAQ 问答（SSE 流式）：先返回命中片段，再逐段返回答案。 */
+async function* faqAskStream(
+  payload: { question: string; history: ChatMessage[]; topK?: number },
+  signal?: AbortSignal,
+): AsyncGenerator<FaqStreamEvent, void, unknown> {
+  const response = await fetch(`${BASE_URL}/faq/ask/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: payload.question,
+      history: payload.history,
+      top_k: payload.topK ?? 5,
+    }),
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(await readError(response))
+  }
+
+  for await (const event of parseSse<SsePayload>(response)) {
+    if (event.error) throw new Error(event.error)
+    if (event.sources) {
+      yield {
+        type: 'sources',
+        model: event.model ?? null,
+        mode: event.mode ?? 'faq',
+        sources: event.sources,
+      }
+    }
+    if (event.content) {
+      yield { type: 'delta', content: event.content }
     }
   }
 }
@@ -131,4 +227,14 @@ export const api = {
     }),
 
   chatStream,
+
+  faqStatus: () => request<FaqStatusResponse>('/faq/status'),
+
+  faqAsk: (question: string, history: ChatMessage[], topK = 5) =>
+    request<FaqAskResponse>('/faq/ask', {
+      method: 'POST',
+      body: JSON.stringify({ question, history, top_k: topK }),
+    }),
+
+  faqAskStream,
 }

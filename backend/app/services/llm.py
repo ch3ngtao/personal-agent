@@ -40,12 +40,16 @@ class DeepSeekService:
     async def complete(
         self,
         messages: list[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> tuple[str, dict[str, Any] | None]:
+        """一次性补全。``temperature`` / ``max_tokens`` 可按次覆盖（例如做判定时用低温短输出）。"""
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,  # type: ignore[arg-type]
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            temperature=self.temperature if temperature is None else temperature,
+            max_tokens=self.max_tokens if max_tokens is None else max_tokens,
         )
         content = response.choices[0].message.content or ""
         usage = response.usage.model_dump() if response.usage else None

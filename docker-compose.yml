@@ -2,20 +2,39 @@ services:
   api:
     build:
       context: ./backend
+      args:
+        # uv 镜像来源。国内服务器可在根目录 .env 里改成 ghcr 加速地址
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:latest}
     image: ch3ngtao-web-api
     environment:
       ENVIRONMENT: production
       CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      # 容器基础镜像默认 UTC：TZ 管日志时间戳，TIMEZONE 管注入给模型的时间
+      TZ: ${TZ:-Asia/Shanghai}
+      TIMEZONE: ${TIMEZONE:-Asia/Shanghai}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       PRELOAD_EMBEDDING_MODEL: ${PRELOAD_EMBEDDING_MODEL:-false}
+      RESUME_PDF_PATH: ${RESUME_PDF_PATH:-/app/resume.pdf}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_PRELOAD: ${RAG_PRELOAD:-false}
+      FAQ_ROUTER_ENABLED: ${FAQ_ROUTER_ENABLED:-true}
+      AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-8}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      # 模型权重下载地址。国内服务器连不上 huggingface.co 时，
+      # 在根目录 .env 里设 HF_ENDPOINT=https://hf-mirror.com 即可
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
     ports:
       - "8000:8000"
     volumes:
       # 缓存 HuggingFace 权重，重建容器不用重新下载
       - hf-cache:/models
+      # 缓存切分后的 chunk 与向量，避免每次重建索引
+      - rag-cache:/app/.cache
+      # 简历 PDF 只读挂载进容器，供 RAG 切分使用
+      - ./简历-AI前端-示例用户.pdf:/app/resume.pdf:ro
     restart: unless-stopped
 
   web:
@@ -30,3 +49,4 @@ services:
 
 volumes:
   hf-cache:
+  rag-cache:
