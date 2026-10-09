@@ -20,7 +20,7 @@ body,
 }
 
 body {
-  background: #f5f6fa;
+  background: #ffffff;
 }
 
 ::-webkit-scrollbar {
@@ -29,6 +29,6 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d0d3dc;
+  background: #d3d1cb;
   border-radius: 4px;
 }

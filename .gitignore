@@ -24,11 +24,11 @@ __pycache__/
 .env.*
 !.env.example
 
-# Local model / data caches
-data/
-models/
-.cache/
-hf_cache/
+# Local model / data caches（限定仓库根目录，避免误伤 frontend/src/data 之类的源码目录）
+/data/
+/models/
+/.cache/
+/hf_cache/
 
 # IDE / editor
 .idea/
