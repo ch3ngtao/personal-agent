@@ -1,0 +1,3 @@
+# 本机全局 ~/.gitignore_global 忽略了 package-lock.json，
+# 但 Dockerfile 使用 npm ci，必须要有锁文件，这里显式覆盖以确保它被纳入版本管理。
+!package-lock.json

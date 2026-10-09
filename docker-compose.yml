@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: ./backend
+    image: ch3ngtao-web-api
+    environment:
+      ENVIRONMENT: production
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      PRELOAD_EMBEDDING_MODEL: ${PRELOAD_EMBEDDING_MODEL:-false}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+    ports:
+      - "8000:8000"
+    volumes:
+      # 缓存 HuggingFace 权重，重建容器不用重新下载
+      - hf-cache:/models
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    image: ch3ngtao-web-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

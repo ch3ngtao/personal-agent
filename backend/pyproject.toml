@@ -1,0 +1,49 @@
+[project]
+name = "ch3ngtao-web-backend"
+version = "0.1.0"
+description = "FastAPI backend with all-MiniLM-L6-v2 embeddings and DeepSeek LLM"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "sentence-transformers>=3.3.0",
+    "torch>=2.4.0",
+    "openai>=1.55.0",
+    "httpx>=0.27.0",
+    "numpy>=1.26.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.uv]
+package = false
+
+# Docker / Linux 上使用 PyTorch 的 CPU-only 索引，避免拖入几个 GB 的 CUDA 依赖。
+# macOS 走 PyPI 默认源。
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
