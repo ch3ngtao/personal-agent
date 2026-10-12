@@ -145,6 +145,10 @@ cp deploy.conf.example deploy.conf   # 填 DEPLOY_SSH=user@host，其余按需�
 
 两个已知的卡点：
 
+- **构建必须走 host 网络**（已默认配好）。部分云服务器上 Docker 默认网桥访问外网极慢：实测同一台机器
+  下载同一个 PyPI 文件，网桥里 0.04 MB/s，host 网络 3.1 MB/s（差 30～80 倍）。`docker-compose.yml`
+  里两个服务的 `build.network` 都设成了 `host`，依赖层构建从 50 多分钟降到 48 秒。换成网络正常的机器时
+  这条也可以去掉。
 - **ghcr.io 极慢**。uv 的镜像来自 `ghcr.io`，国内服务器实测 20MB 要 20 多分钟。在
   `deploy.conf` 里设 `DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest`
   （或 `ghcr.nju.edu.cn/astral-sh/uv:latest`）走加速，改完必须重新构建才生效。

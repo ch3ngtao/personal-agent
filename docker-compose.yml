@@ -2,6 +2,9 @@ services:
   api:
     build:
       context: ./backend
+      # 用宿主机网络构建：这台服务器上 Docker 默认网桥访问外网只有几十 KB/s，
+      # 走 host 网络能稳定跑到几 MB/s，构建（uv sync / npm ci）快很多
+      network: host
       args:
         # uv 镜像来源。国内服务器可在根目录 .env 里改成 ghcr 加速地址
         UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:latest}
@@ -43,6 +46,7 @@ services:
   web:
     build:
       context: ./frontend
+      network: host
     image: ch3ngtao-web-frontend
     ports:
       - "80:80"
