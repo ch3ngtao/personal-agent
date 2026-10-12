@@ -102,7 +102,8 @@ export default function MessageBubble({ turn, onRetry }: MessageBubbleProps) {
             {sourcesOpen && (
               <div className="chat-sources-list" ref={sourcesRef}>
                 {sources.map((source, position) => (
-                  <article key={source.index} className="chat-source">
+                  // 不同工具召回时序号会撞车，加上章节才唯一。
+                  <article key={`${source.section ?? ''}-${source.index}`} className="chat-source">
                     <header className="chat-source-head">
                       {/* 序号与答案里「片段 N」的引用保持一致，所以按召回顺序编号 */}
                       <span>片段 {position + 1}</span>

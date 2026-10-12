@@ -43,9 +43,48 @@ export interface RagSource {
   index: number
   content: string
   page: number | null
+  /** 片段所属的简历章节；补充知识库的片段则是资料标题。 */
+  section?: string | null
   score: number
   vector_score: number | null
 }
+
+/** GET /api/agent/info：agent 的模型、工具与会话记忆概况。 */
+export interface AgentInfoResponse {
+  model: string
+  configured: boolean
+  thread_backend: string
+  max_steps: number
+  tools: { name: string; description: string }[]
+  knowledge_documents: number
+  knowledge_chunks: number
+}
+
+/** agent 这一轮里的某次工具调用。 */
+export interface AgentStep {
+  name: string
+  args: Record<string, unknown>
+  summary: string | null
+}
+
+/**
+ * agent 的流式事件：
+ * meta（会话 id）→ tool_start / tool_end（在调什么工具、拿到哪些片段）→ delta（答案增量）→ done（收尾）。
+ */
+export type AgentStreamEvent =
+  | { type: 'meta'; thread_id: string; model: string }
+  | { type: 'tool_start'; name: string; args: Record<string, unknown> }
+  | { type: 'tool_end'; name: string; sources: RagSource[]; query: string | null }
+  | { type: 'delta'; content: string }
+  | {
+      type: 'done'
+      thread_id: string
+      answer: string
+      steps: AgentStep[]
+      sources: RagSource[]
+      usage: Record<string, unknown> | null
+    }
+  | { type: 'error'; error: string }
 
 /** GET /api/faq/status：索引与模型配置状态。 */
 export interface FaqStatusResponse {
@@ -205,8 +244,42 @@ async function* faqAskStream(
   }
 }
 
+/**
+ * agent 会话（SSE 流式）：模型自己决定要不要调工具、调哪个、几轮。
+ * 传 thread_id 续上上一轮的会话记忆（记忆存在服务端，不需要回传 history）。
+ */
+async function* agentChatStream(
+  payload: { message: string; threadId?: string | null },
+  signal?: AbortSignal,
+): AsyncGenerator<AgentStreamEvent, void, unknown> {
+  const response = await fetch(`${BASE_URL}/agent/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: payload.message, thread_id: payload.threadId ?? null }),
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(await readError(response))
+  }
+
+  for await (const event of parseSse<AgentStreamEvent>(response)) {
+    if (event.type === 'error') throw new Error(event.error)
+    yield event
+  }
+}
+
 export const api = {
   health: () => request<HealthResponse>('/health'),
+
+  agentInfo: () => request<AgentInfoResponse>('/agent/info'),
+
+  agentChatStream,
+
+  agentThreadReset: (threadId: string) =>
+    request<{ thread_id: string; messages: ChatMessage[] }>(`/agent/threads/${threadId}`, {
+      method: 'DELETE',
+    }),
 
   embed: (texts: string[]) =>
     request<EmbeddingResponse>('/embeddings', {

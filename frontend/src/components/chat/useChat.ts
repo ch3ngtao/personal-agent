@@ -2,15 +2,19 @@ import { useCallback, useRef, useState } from 'react'
 import { api, type ChatMessage, type RagSource } from '../../api/client'
 
 export type ChatRole = 'user' | 'assistant'
-/** 回答来源：faq = 简历知识库（RAG），chat = 纯 DeepSeek 对话。 */
-export type ChatMode = 'faq' | 'chat'
+/**
+ * 回答来源：
+ * - agent = 带工具的智能助手，自己决定要不要检索简历 / 查时间 / 查补充知识库；
+ * - chat = agent 不可用时的兜底，纯 DeepSeek 对话。
+ */
+export type ChatMode = 'agent' | 'chat'
 export type ChatStatus = 'unknown' | 'connecting' | ChatMode
 
 export interface ChatTurn {
   id: string
   role: ChatRole
   content: string
-  /** 知识库命中的简历片段（仅 FAQ 通道有）。 */
+  /** agent 调用检索工具时带回的片段，界面上单独展示引用。 */
   sources?: RagSource[]
   mode?: ChatMode
   /** 正在流式输出。 */
@@ -27,7 +31,7 @@ export interface ChatController {
   stop: () => void
   reset: () => void
   retry: (turnId: string) => void
-  /** 探测一次后端：知识库可用就走 RAG，否则退回通用对话（浮层每次打开都会调）。 */
+  /** 探测一次后端：agent 就绪就走 agent，否则退回通用对话（浮层每次打开都会调）。 */
   refreshStatus: () => void
 }
 
@@ -42,7 +46,6 @@ export const QUICK_QUESTIONS = [
 
 /** 送回后端的上下文轮数上限，避免多轮之后请求体越来越大。 */
 const MAX_HISTORY_TURNS = 8
-const TOP_K = 5
 
 const SYSTEM_PROMPT: ChatMessage = {
   role: 'system',
@@ -68,17 +71,42 @@ async function askChat(
   }
 }
 
-/** 简历 FAQ：后端先返回命中的片段，再流式返回答案。 */
-async function askFaq(
+/** 同一段内容可能被两个工具都命中，靠「章节 + 序号」判重。 */
+function sourceKey(source: RagSource): string {
+  return `${source.section ?? ''}#${source.index}`
+}
+
+/**
+ * agent 会话：模型自己决定调不调工具。
+ * 事件顺序是 meta（会话 id）→ tool_start / tool_end（引用片段）→ delta（答案增量）→ done（收尾）。
+ */
+async function askAgent(
   question: string,
-  history: ChatMessage[],
+  threadId: string | null,
   signal: AbortSignal,
-  onDelta: (delta: string) => void,
-  onSources: (sources: RagSource[], mode: ChatMode) => void,
+  handlers: {
+    onThread: (threadId: string) => void
+    onSources: (sources: RagSource[]) => void
+    onDelta: (delta: string) => void
+  },
 ): Promise<void> {
-  for await (const event of api.faqAskStream({ question, history, topK: TOP_K }, signal)) {
-    if (event.type === 'sources') onSources(event.sources, event.mode)
-    else onDelta(event.content)
+  let streamed = false
+  for await (const event of api.agentChatStream({ message: question, threadId }, signal)) {
+    if (event.type === 'meta') {
+      handlers.onThread(event.thread_id)
+    } else if (event.type === 'tool_end') {
+      if (event.sources.length) handlers.onSources(event.sources)
+    } else if (event.type === 'delta') {
+      streamed = true
+      handlers.onDelta(event.content)
+    } else if (event.type === 'done') {
+      if (event.sources.length) handlers.onSources(event.sources)
+      // 通常答案已经通过 delta 吐完了；没有增量时用收尾里的完整答案兜底。
+      if (!streamed && event.answer) {
+        streamed = true
+        handlers.onDelta(event.answer)
+      }
+    }
   }
 }
 
@@ -92,6 +120,8 @@ export default function useChat(): ChatController {
   const statusRef = useRef<ChatStatus>('unknown')
   const sendingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
+  /** agent 的会话 id：记忆存在服务端，续聊只要把它带回去。 */
+  const threadIdRef = useRef<string | null>(null)
 
   const commit = useCallback((updater: (prev: ChatTurn[]) => ChatTurn[]) => {
     const next = updater(turnsRef.current)
@@ -114,14 +144,14 @@ export default function useChat(): ChatController {
     statusRef.current = 'connecting'
     setStatus('connecting')
     void api
-      .faqStatus()
+      .agentInfo()
       .then((info) => {
-        const next: ChatMode = info.ready && info.llm_configured ? 'faq' : 'chat'
+        const next: ChatMode = info.configured ? 'agent' : 'chat'
         statusRef.current = next
         setStatus(next)
       })
       .catch(() => {
-        // 后端还没上 FAQ 接口（404/未启动）时静默退回通用对话。
+        // 后端还没上 agent 接口（404/未启动）时静默退回通用对话。
         statusRef.current = 'chat'
         setStatus('chat')
       })
@@ -158,31 +188,48 @@ export default function useChat(): ChatController {
         patchTurn(assistantId, { streaming: false, content: accumulated, ...patch })
       }
 
+      // agent 可能连着查几个工具，引用是分批回来的，这里攒起来并去重。
+      let collected: RagSource[] = []
+      const absorbSources = (incoming: RagSource[]) => {
+        const seen = new Set(collected.map(sourceKey))
+        const fresh = incoming.filter((item) => !seen.has(sourceKey(item)))
+        if (!fresh.length) return
+        collected = [...collected, ...fresh]
+        patchTurn(assistantId, { sources: collected })
+      }
+
+      // 探测还没回来时也先按 agent 走：它是主链路，失败了再退回通用对话。
+      let usedMode: ChatMode = statusRef.current === 'chat' ? 'chat' : 'agent'
+
       const run = async () => {
         try {
-          if (statusRef.current === 'faq') {
+          if (statusRef.current !== 'chat') {
             try {
-              await askFaq(question, history, controller.signal, absorb, (sources, mode) => {
-                // 后端会判定这次能不能用简历回答：chat 表示已转普通对话，不展示引用。
-                patchTurn(assistantId, { sources, mode })
+              await askAgent(question, threadIdRef.current, controller.signal, {
+                onThread: (threadId) => {
+                  threadIdRef.current = threadId
+                },
+                onSources: absorbSources,
+                onDelta: absorb,
               })
-              if (!accumulated) throw new Error('简历知识库没有返回内容')
-            } catch (faqError) {
-              if (controller.signal.aborted) throw faqError
+              if (!accumulated) throw new Error('助手没有返回内容')
+            } catch (agentError) {
+              if (controller.signal.aborted) throw agentError
               // 已经吐字就不再重试，否则答案会出现两段拼接。
-              if (accumulated) throw faqError
-              // 索引没就绪 / 没配 KEY 时退回通用对话，至少能答上话。
+              if (accumulated) throw agentError
+              // agent 没起来（未配 KEY / 服务未就绪）时退回通用对话，至少能答上话。
               statusRef.current = 'chat'
               setStatus('chat')
+              usedMode = 'chat'
               await askChat(question, history, controller.signal, absorb)
-              patchTurn(assistantId, { mode: 'chat' })
             }
           } else {
+            usedMode = 'chat'
             await askChat(question, history, controller.signal, absorb)
           }
 
           if (!accumulated) throw new Error('后端没有返回任何内容')
-          finish({})
+          finish({ mode: usedMode })
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error)
           if (controller.signal.aborted) {
@@ -209,6 +256,10 @@ export default function useChat(): ChatController {
 
   const reset = useCallback(() => {
     abortRef.current?.abort()
+    const threadId = threadIdRef.current
+    threadIdRef.current = null
+    // 服务端的会话记忆也要一起清掉，否则清空界面之后它还记着上一轮的上下文。
+    if (threadId) void api.agentThreadReset(threadId).catch(() => undefined)
     commit(() => [])
   }, [commit])
 

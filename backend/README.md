@@ -79,6 +79,8 @@ FastAPI 服务，提供两组能力：
 | 工具 | 无 | `search_resume`、`search_knowledge`、`get_current_time` |
 | 多轮记忆 | 前端回传 `history` | 服务端 checkpointer（`InMemorySaver`，按 `thread_id`） |
 
+前端右下角的会话气泡走的是 agent；`/api/faq/*` 保留为固定链路，可单独调用、便于对照。
+
 相关文件：
 
 | 文件 | 作用 |

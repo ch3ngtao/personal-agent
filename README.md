@@ -187,12 +187,15 @@ cp deploy.conf.example deploy.conf   # 填 DEPLOY_SSH=user@host，其余按需�
 首页右下角常驻一个会话气泡，点击后在页面内弹出会话窗口（消息列表 + 输入框），支持
 快捷问题、流式输出、引用片段展开、复制回答、停止与重试。
 
-打开窗口时会先请求一次 `/api/faq/status`：
+对话走 `/api/agent/chat/stream`：由 agent 自己决定要不要检索简历、查时间、查补充知识库，
+检索类工具带回的片段作为引用展示；会话记忆存在服务端，靠 `thread_id` 续聊。
 
-- 简历索引就绪且配置了 `DEEPSEEK_API_KEY` → 走 `/api/faq/ask/stream`，基于简历片段回答并展示引用；
-- 后端还没上 FAQ 接口或索引未就绪 → 自动退回 `/api/chat/stream`，用通用对话兜底。
+打开窗口时会先请求一次 `/api/agent/info`：
 
-FAQ 调用在返回首段文字前失败时也会自动降级，用户不会看到空白窗口。
+- 配置了 `DEEPSEEK_API_KEY`（agent 就绪）→ 走 `/api/agent/chat/stream`；
+- 后端还没上 agent 接口或未配置 → 自动退回 `/api/chat/stream`，用通用对话兜底。
+
+agent 调用在返回首段文字前失败时也会自动降级，用户不会看到空白窗口。
 
 示例：
 
@@ -262,6 +265,7 @@ curl -X POST http://localhost:8000/api/faq/ask \
 
 `/api/faq/*` 是**固定链路**：一定会检索一次简历再生成答案。`/api/agent/*` 是**完整 agent**：
 把能力注册成工具，由模型自己决定查不查、查哪个、查几轮，会话记忆存在服务端。
+**首页右下角的会话气泡走的就是 agent**；`/api/faq/*` 保留为固定链路，可单独调用、便于对照。
 
 | | `/api/faq/*` | `/api/agent/*` |
 | --- | --- | --- |

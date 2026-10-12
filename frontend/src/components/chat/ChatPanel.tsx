@@ -12,20 +12,20 @@ interface ChatPanelProps {
 
 const STATUS_TEXT: Record<ChatStatus, string> = {
   unknown: '点击气泡开始对话',
-  connecting: '正在连接简历知识库…',
-  faq: '已连接简历知识库',
+  connecting: '正在连接智能助手…',
+  agent: '已连接智能助手',
   chat: '通用对话模式',
 }
 
 const STATUS_HINT: Record<ChatStatus, string> = {
   unknown: '打开后开始和助手对话',
-  connecting: '正在确认简历索引状态',
-  faq: '回答前会先检索简历片段，再交给 DeepSeek 组织语言',
-  chat: '简历知识库暂未就绪，先直接由 DeepSeek 回答',
+  connecting: '正在确认 agent 是否就绪',
+  agent: '由 agent 自己决定要不要检索简历、查时间或查补充知识库',
+  chat: 'agent 暂未就绪，先直接由 DeepSeek 回答',
 }
 
 function statusTone(status: ChatStatus): string {
-  if (status === 'faq') return 'is-ok'
+  if (status === 'agent') return 'is-ok'
   if (status === 'connecting' || status === 'chat') return 'is-warn'
   return 'is-idle'
 }

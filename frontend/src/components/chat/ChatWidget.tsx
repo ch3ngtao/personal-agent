@@ -5,7 +5,7 @@ import useChat from './useChat'
 
 /**
  * 右侧悬浮的会话气泡：点击后在页面内弹出对话窗口。
- * 对话走 /api/faq（简历知识库），知识库不可用时自动退回 /api/chat。
+ * 对话走 /api/agent（带工具的智能助手），agent 不可用时自动退回 /api/chat。
  */
 export default function ChatWidget() {
   const chat = useChat()
@@ -24,8 +24,8 @@ export default function ChatWidget() {
   const openPanel = () => {
     setHintDismissed(true)
     setOpen(true)
-    // 每次打开都确认一次索引状态：第一次可能还没构建好，后面就绪了能自动切回知识库。
-    if (chat.status !== 'faq') chat.refreshStatus()
+    // 每次打开都确认一次：第一次可能后端还没起好，之后就绪了能自动切回 agent。
+    if (chat.status !== 'agent') chat.refreshStatus()
   }
 
   const toggle = () => {
