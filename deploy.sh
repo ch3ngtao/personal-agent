@@ -143,9 +143,11 @@ usage() {
       --host <值>   临时指定服务器，如 ubuntu@1.2.3.4 或 ssh 别名
       --dir <路径>  临时指定服务器上的部署目录
       --upload-resume [文件]
-                    把自己的简历 PDF 上传到服务器（文件名默认取服务器 .env 里的
+                    把自己的简历 PDF 上传到服务器（默认取本地仓库根目录的
                     RESUME_FILE）。这份简历不进 git，也不会随代码上传
-      --resume <文件> 指定简历文件名，配合 --upload-resume 使用
+      --resume <文件> 指定简历文件名或绝对路径，配合 --upload-resume 使用
+                    （服务器上会存成同名文件；和服务器 .env 的 RESUME_FILE
+                     不一致时会提醒你改哪里）
 
 配置文件:
   --env hr 读 deploy.hr.conf，--env public 读 deploy.public.conf，不带 --env 读 deploy.conf。
@@ -573,24 +575,39 @@ init_deploy() {
 upload_resume() {
   preflight
 
-  local name="$DEPLOY_RESUME_FILE"
-  if [ -z "$name" ]; then
-    name="$(ssh_exec "sed -n 's/^RESUME_FILE=//p' $DEPLOY_DIR/.env 2>/dev/null | head -1" | tr -d '\r')"
-  fi
-  [ -n "$name" ] || name="简历-李四.pdf"
+  # 服务器 .env 里配置的是哪一份（用来校验名字对不对）
+  local configured
+  configured="$(ssh_exec "sed -n 's/^RESUME_FILE=//p' $DEPLOY_DIR/.env 2>/dev/null | head -1" | tr -d '\r')"
 
-  local local_path="$name"
+  # 本地源文件：--resume 可以给文件名，也可以给绝对路径
+  local source="${DEPLOY_RESUME_FILE:-$configured}"
+  [ -n "$source" ] || source="简历-李四.pdf"
+
+  local local_path="$source"
   case "$local_path" in
     /*) ;;
-    *) local_path="$ROOT_DIR/$name" ;;
+    *) local_path="$ROOT_DIR/$source" ;;
   esac
 
-  [ -f "$local_path" ] || die "本地找不到简历：${local_path}（用 --resume <文件名> 指定，或在 deploy.conf 里配 DEPLOY_RESUME_FILE）"
+  [ -f "$local_path" ] || die "本地找不到简历：${local_path}（用 --resume <文件名或绝对路径> 指定，或在 deploy.conf 里配 DEPLOY_RESUME_FILE）"
 
-  log "上传简历：$name → ${DEPLOY_SSH}:${DEPLOY_DIR}/"
+  # 服务器上只保留文件本身的名字（传绝对路径时不要跟着目录走）
+  local name
+  name="$(basename "$local_path")"
+
+  log "上传简历：$local_path → ${DEPLOY_SSH}:${DEPLOY_DIR}/$name"
   ssh_exec "mkdir -p $DEPLOY_DIR" || die "连接服务器失败"
   scp_put "$local_path" "$DEPLOY_DIR/$name" || die "上传失败"
   ok "已上传 $name"
+
+  if [ -n "$configured" ] && [ "$configured" != "$name" ]; then
+    local env_file_hint="配置文件"
+    [ -n "$DEPLOY_ENV" ] && env_file_hint="env/$DEPLOY_ENV.env"
+    warn "注意：服务器 .env 里 RESUME_FILE=${configured}，跟你刚传的 ${name} 名字不一样，这份不会生效"
+    warn "  要用它就把 ${env_file_hint} 里的 RESUME_FILE 改成 ${name}，"
+    warn "  再执行 ./deploy.sh${DEPLOY_ENV:+ --env $DEPLOY_ENV} --init --force-env"
+  fi
+
   warn "换了简历要让它生效：先重建前端（页面数据是构建时生成的），再重启让后端重新读简历——"
   warn "  ./deploy.sh${DEPLOY_ENV:+ --env $DEPLOY_ENV} --only web"
   warn "  ./deploy.sh${DEPLOY_ENV:+ --env $DEPLOY_ENV} --restart"
