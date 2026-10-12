@@ -231,9 +231,10 @@ cp deploy.public.conf.example deploy.public.conf
   下载同一个 PyPI 文件，网桥里 0.04 MB/s，host 网络 3.1 MB/s（差 30～80 倍）。`docker-compose.yml`
   里两个服务的 `build.network` 都设成了 `host`，依赖层构建从 50 多分钟降到 48 秒。换成网络正常的机器时
   这条也可以去掉。
-- **ghcr.io 极慢**。uv 的镜像来自 `ghcr.io`，国内服务器实测 20MB 要 20 多分钟。在
-  `deploy.hr.conf`（或 `deploy.public.conf`）里设 `DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest`
-  （或 `ghcr.nju.edu.cn/astral-sh/uv:latest`）走加速，改完必须重新构建才生效。
+- **不再依赖 ghcr**（已改掉）。后端镜像以前要 `COPY --from=ghcr.io/astral-sh/uv` 拿 uv 二进制，
+  国内各加速站（`ghcr.m.daocloud.io` 等）经常 502，构建会直接失败。现在基础镜像只用 Docker Hub 的
+  `python:3.12-slim`，uv 用 `pip install uv` 从 PyPI 装——和 `uv sync` 同一个源，少一个外部依赖。
+  要固定版本就把它写成 `pip install --no-cache-dir uv==0.12.16`。
 - **PyPI 换镜像源没用**。依赖的下载地址写在 `uv.lock` 里，`uv sync --frozen` 只认锁文件
   里的 URL，改索引地址不会改变下载来源，这部分只能等首次下载完（uv 缓存会保留已下载的包，
   中断后重跑能接着来）。

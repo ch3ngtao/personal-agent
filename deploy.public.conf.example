@@ -11,7 +11,6 @@ DEPLOY_ENV_FILE=env/public.env
 DEPLOY_SITE_URL=https://lisi.ch3ngtao.top
 DEPLOY_RESUME_FILE=简历-李四.pdf
 
-DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest
 DEPLOY_HF_ENDPOINT=https://hf-mirror.com
 
 # 健康检查用的端口（要和 env/public.env 里的端口一致）

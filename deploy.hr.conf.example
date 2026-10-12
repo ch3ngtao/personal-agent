@@ -13,8 +13,7 @@ DEPLOY_SITE_URL=https://ch3ngtao.top
 # 自己的简历文件名（换成你的）；它不在 git 里，需要先 --upload-resume 传到服务器
 DEPLOY_RESUME_FILE=简历-示例.pdf
 
-# 国内服务器加速
-DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest
+# 国内服务器连不上 huggingface.co 时走镜像
 DEPLOY_HF_ENDPOINT=https://hf-mirror.com
 
 # 健康检查用的端口（要和 env/hr.env 里的端口一致）

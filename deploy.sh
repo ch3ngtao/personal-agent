@@ -56,7 +56,6 @@ ENV_DEPLOY_KEY="${DEPLOY_KEY:-}"
 ENV_DEPLOY_SERVICES="${DEPLOY_SERVICES:-}"
 ENV_DEPLOY_WEB_PORT="${DEPLOY_WEB_PORT:-}"
 ENV_DEPLOY_API_PORT="${DEPLOY_API_PORT:-}"
-ENV_DEPLOY_UV_IMAGE="${DEPLOY_UV_IMAGE:-}"
 ENV_DEPLOY_HF_ENDPOINT="${DEPLOY_HF_ENDPOINT:-}"
 ENV_DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-}"
 ENV_DEPLOY_SITE_URL="${DEPLOY_SITE_URL:-}"
@@ -74,7 +73,6 @@ fi
 [ -n "$ENV_DEPLOY_SERVICES" ] && DEPLOY_SERVICES="$ENV_DEPLOY_SERVICES"
 [ -n "$ENV_DEPLOY_WEB_PORT" ] && DEPLOY_WEB_PORT="$ENV_DEPLOY_WEB_PORT"
 [ -n "$ENV_DEPLOY_API_PORT" ] && DEPLOY_API_PORT="$ENV_DEPLOY_API_PORT"
-[ -n "$ENV_DEPLOY_UV_IMAGE" ] && DEPLOY_UV_IMAGE="$ENV_DEPLOY_UV_IMAGE"
 [ -n "$ENV_DEPLOY_HF_ENDPOINT" ] && DEPLOY_HF_ENDPOINT="$ENV_DEPLOY_HF_ENDPOINT"
 [ -n "$ENV_DEPLOY_ENV_FILE" ] && DEPLOY_ENV_FILE="$ENV_DEPLOY_ENV_FILE"
 [ -n "$ENV_DEPLOY_SITE_URL" ] && DEPLOY_SITE_URL="$ENV_DEPLOY_SITE_URL"
@@ -159,8 +157,6 @@ usage() {
     DEPLOY_SERVICES   只重建某个服务时填 web 或 api，留空表示两个都重建
     DEPLOY_WEB_PORT   网页端口，默认 5173（健康检查用）
     DEPLOY_API_PORT   接口端口，默认 8000（健康检查用）
-    DEPLOY_UV_IMAGE   uv 基础镜像，国内可填 ghcr 加速地址，如
-                      ghcr.m.daocloud.io/astral-sh/uv:latest
     DEPLOY_HF_ENDPOINT 模型权重下载地址，国内填 https://hf-mirror.com
     DEPLOY_ENV_FILE   该环境的环境变量文件（如 env/hr.env），会上传到服务器成为 .env
     DEPLOY_SITE_URL   部署完提示的访问地址，如 https://ch3ngtao.top
@@ -494,7 +490,6 @@ build_env_payload() {
   printf 'DEEPSEEK_MODEL=deepseek-chat\n'
   printf 'TZ=Asia/Shanghai\n'
   printf 'TIMEZONE=Asia/Shanghai\n'
-  [ -n "$DEPLOY_UV_IMAGE" ] && printf 'UV_IMAGE=%s\n' "$DEPLOY_UV_IMAGE"
   [ -n "$DEPLOY_HF_ENDPOINT" ] && printf 'HF_ENDPOINT=%s\n' "$DEPLOY_HF_ENDPOINT"
   return 0
 }
