@@ -8,7 +8,7 @@ services:
     image: ch3ngtao-web-api
     environment:
       ENVIRONMENT: production
-      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      CORS_ORIGINS: '["https://ch3ngtao.top","https://www.ch3ngtao.top"]'
       # 容器基础镜像默认 UTC：TZ 管日志时间戳，TIMEZONE 管注入给模型的时间
       TZ: ${TZ:-Asia/Shanghai}
       TIMEZONE: ${TIMEZONE:-Asia/Shanghai}
@@ -17,6 +17,8 @@ services:
       RESUME_PDF_PATH: ${RESUME_PDF_PATH:-/app/resume.pdf}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
       RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_SECTION_AWARE: ${RAG_SECTION_AWARE:-true}
+      RAG_MAX_CONTEXT_CHARS: ${RAG_MAX_CONTEXT_CHARS:-4000}
       RAG_PRELOAD: ${RAG_PRELOAD:-false}
       FAQ_ROUTER_ENABLED: ${FAQ_ROUTER_ENABLED:-true}
       AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-8}
@@ -27,7 +29,8 @@ services:
       # 在根目录 .env 里设 HF_ENDPOINT=https://hf-mirror.com 即可
       HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
     ports:
-      - "8000:8000"
+      # 只绑本机：后端不再对外暴露，全部流量走 nginx 的 HTTPS
+      - "127.0.0.1:8000:8000"
     volumes:
       # 缓存 HuggingFace 权重，重建容器不用重新下载
       - hf-cache:/models
@@ -42,7 +45,11 @@ services:
       context: ./frontend
     image: ch3ngtao-web-frontend
     ports:
-      - "5173:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      # 证书只读挂载进容器；续期时替换文件即可，无需重建镜像
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - api
     restart: unless-stopped

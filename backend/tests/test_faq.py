@@ -82,6 +82,56 @@ def test_search_finds_current_employer(client: TestClient, index_status: dict) -
     assert any("示例科技" in match["content"] for match in matches)
 
 
+def test_search_covers_whole_section(client: TestClient, index_status: dict) -> None:
+    """问「有哪些项目经验」时要把该节条目给全，只取 top-k 会漏掉一半项目。"""
+    response = client.post("/api/faq/search", json={"query": "有哪些项目经验？", "top_k": 5})
+    assert response.status_code == 200
+
+    matches = response.json()["matches"]
+    joined = "\n".join(match["content"] for match in matches)
+
+    # 【项目经历】正文里的 4 个项目
+    for name in ("语音助手", "可视化报表平台", "电信 10000 号新门户系统", "Bazirim 电商 H5 商城"):
+        assert name in joined
+    # 末尾补充的【其他项目】也要带上，否则会漏掉一串项目
+    for name in ("示例科技产品门户", "物流系统", "供应商管理平台", "运营数据大屏"):
+        assert name in joined
+    # 整节返回，但不会把整份简历都塞进上下文
+    assert 0 < len(matches) < index_status["chunks"]
+
+
+def test_related_sections_are_grouped() -> None:
+    """项目 / 工作这类会分节写的内容，问一节要带上它的补充章节。"""
+    assert rag.match_sections("有哪些项目经验？") == ["项目经历", "其他项目"]
+    assert rag.match_sections("介绍下工作经历") == ["工作经历", "实习经历"]
+    # 明确问补充章节时不需要反过来带上主体章节
+    assert rag.match_sections("其他项目有哪些") == ["其他项目"]
+    assert rag.match_sections("帮我写段代码") == []
+
+
+def test_merge_group_dedupes_overlap() -> None:
+    """同一条目的碎片合并时，重复的段落标题与 overlap 都要去掉。"""
+    header = "2023.07-至今 A 项目"
+    group = [
+        rag.ResumeChunk(
+            index=0,
+            content=f"【项目经历】\n{header}\n前端负责人\n1. 优化打包体积",
+            section="项目经历",
+        ),
+        rag.ResumeChunk(
+            index=1,
+            content=f"【项目经历】\n{header}\n化打包体积由 2 MB 降到 1 MB。\n2. 第二点",
+            section="项目经历",
+        ),
+    ]
+
+    merged = rag._merge_group(group, overlap=8)
+
+    assert merged.content.count(header) == 1
+    assert merged.content.count("化打包体积") == 1
+    assert "2. 第二点" in merged.content
+
+
 def test_resume_prompt_injects_today() -> None:
     """简历链路也要告诉模型今天是几号，否则「2022.10-至今」判断不了是否在职。"""
     index = rag.get_resume_index()

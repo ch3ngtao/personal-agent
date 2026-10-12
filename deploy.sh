@@ -103,6 +103,7 @@ usage() {
       --build-log   跟随后台构建的日志（Ctrl+C 退出，不影响构建）
       --status      只查看容器状态与健康检查
       --logs [服务] 实时查看日志，服务可选 api 或 web，默认全部
+      --only <服务> 只重建并重启指定服务（web 或 api），另一个保持不动
       --host <值>   临时指定服务器，如 ubuntu@1.2.3.4 或 ssh 别名
       --dir <路径>  临时指定服务器上的部署目录
 
@@ -146,6 +147,14 @@ while [ $# -gt 0 ]; do
       ;;
     --host) [ $# -ge 2 ] || die "--host 需要一个值"; DEPLOY_SSH="$2"; shift 2 ;;
     --dir)  [ $# -ge 2 ] || die "--dir 需要一个值";  DEPLOY_DIR="$2"; shift 2 ;;
+    --only)
+      [ $# -ge 2 ] || die "--only 需要一个值（web 或 api）"
+      case "$2" in
+        web|api) DEPLOY_SERVICES="$2" ;;
+        *) die "--only 只支持 web 或 api" ;;
+      esac
+      shift 2
+      ;;
     *) die "未知参数: $1（用 --help 查看用法）" ;;
   esac
 done

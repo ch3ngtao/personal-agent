@@ -94,6 +94,31 @@ CHUNKING_STRATEGY = "section-aware-v1"
 # 但一条纯「时间 + 名称 + 职位」的短索引片段就很好命中。
 INDEXED_SECTIONS = ("工作经历", "实习经历", "项目经历", "项目经验", "教育经历")
 
+# 分组时给索引片段的专用 key；整节召回但一次都没命中时用的兜底相关度。
+_INDEX_ENTRY = "·索引"
+_SECTION_BASE_SCORE = 0.5
+
+# 「章节级提问」的识别词。问「有哪些项目经验」时，只按相似度取 top-k 会漏条目
+# （实测 4 个项目只召回 2 个碎片），这类问题改成把整节条目一起交给模型。
+# 顺序有意义：先匹配更具体的章节，「其他项目」要排在「项目经历」前面。
+SECTION_QUERY_ALIASES: dict[str, tuple[str, ...]] = {
+    "其他项目": ("其他项目",),
+    "项目经历": ("项目经历", "项目经验", "项目", "作品", "做过哪些"),
+    "工作经历": ("工作经历", "工作经", "职业经历", "履历", "任职", "公司"),
+    "教育经历": ("教育经历", "教育背景", "学历", "学校", "毕业"),
+    "相关技能": ("相关技能", "专业技能", "技能清单", "技术栈", "技能", "擅长"),
+    "求职意向": ("求职意向", "意向岗位", "期望薪资", "求职"),
+    "自我评价": ("自我评价",),
+}
+
+# 被问到的章节要连同这些「补充章节」一起给出：简历常把项目分两节写，
+# 只给【项目经历】正文会把末尾【其他项目】里那一串项目整段漏掉。
+RELATED_SECTIONS: dict[str, tuple[str, ...]] = {
+    "项目经历": ("其他项目",),
+    "项目经验": ("其他项目",),
+    "工作经历": ("实习经历",),
+}
+
 
 class ResumePdfNotFoundError(FileNotFoundError):
     """找不到简历 PDF 时抛出。"""
@@ -226,6 +251,8 @@ class ResumeIndex:
         self.chunk_size = self.settings.rag_chunk_size
         self.chunk_overlap = self.settings.rag_chunk_overlap
         self.hybrid = self.settings.rag_hybrid
+        self.section_aware = self.settings.rag_section_aware
+        self.max_context_chars = max(0, self.settings.rag_max_context_chars)
         self.default_top_k = self.settings.rag_top_k
         self._cache_path = self._resolve_cache_path(self.settings.rag_cache_path)
 
@@ -541,7 +568,17 @@ class ResumeIndex:
         return self._bm25
 
     def search(self, query: str, top_k: int | None = None) -> list[ResumeChunk]:
-        """第 4 步：召回与问题最相关的 chunk。"""
+        """第 4 步：召回与问题最相关的 chunk。
+
+        分两种情况：
+
+        * **章节级提问**（「有哪些项目经验」「工作经历」）→ 把该章节的条目全部返回。
+          一条经历常被切成多个碎片，只取 top-k 会让「4 个项目只答出 2 个」。
+        * **其余提问** → 正常混合检索，再把命中片段补全成完整条目（半句话开头的
+          续块和它的首块一起给模型，答案才不会断头）。
+
+        关掉 ``RAG_SECTION_AWARE`` 就退回纯 top-k 老行为。
+        """
         data = self.ensure_ready()
         k = max(1, min(top_k or self.default_top_k, len(data.chunks)))
 
@@ -561,9 +598,74 @@ class ResumeIndex:
             hybrid=self.hybrid,
             candidate_limit=pool,
         )
-        return [
+        hits = [
             _with_scores(data.chunks[index], score=score, vector=vector_scores.get(index)) for index, score in ordered
         ]
+
+        if not self.section_aware:
+            return hits
+
+        sections = match_sections(query)
+        if sections:
+            expanded = self._section_chunks(data, sections, hits)
+            if expanded:
+                return expanded
+        return self._expand_entries(data, hits)
+
+    # ---- 检索后的补全 ----
+
+    def _section_chunks(
+        self,
+        data: _IndexData,
+        sections: Sequence[str],
+        hits: Sequence[ResumeChunk],
+    ) -> list[ResumeChunk]:
+        """整节返回：索引片段（列全条目名）+ 这些章节下合并后的完整条目。"""
+        wanted = set(sections)
+        groups = {key: group for key, group in _group_by_entry(data.chunks).items() if key[0] in wanted}
+        if not groups:
+            return []
+
+        # 用命中的最高分当作整节的「相关度」，界面上不会出现一堆 0%。
+        base_score = next((hit.score for hit in hits if hit.section in wanted), _SECTION_BASE_SCORE)
+
+        selected: list[ResumeChunk] = []
+        budget = self.max_context_chars
+
+        # 索引片段（只列「时间 + 名称 + 职位」）放最前面：它保证条目名一个不落。
+        for section in sections:
+            index_group = groups.pop((section, _INDEX_ENTRY), None)
+            if index_group:
+                entry = _merge_group(index_group, self.chunk_overlap)
+                selected.append(_rescore(entry, base_score))
+                budget -= entry.chars
+
+        for group in groups.values():
+            if budget <= 0:
+                break
+            entry = _merge_group(group, self.chunk_overlap)
+            selected.append(_rescore(entry, base_score))
+            budget -= entry.chars
+        return selected
+
+    def _expand_entries(self, data: _IndexData, hits: Sequence[ResumeChunk]) -> list[ResumeChunk]:
+        """把命中的碎片补成完整条目，并去掉重复条目。"""
+        groups = _group_by_entry(data.chunks)
+        expanded: list[ResumeChunk] = []
+        seen: set[tuple[str | None, str]] = set()
+        budget = self.max_context_chars
+        for hit in hits:
+            key = _entry_key(hit)
+            group = groups.get(key)
+            if not group or key in seen:
+                continue
+            entry = _merge_group(group, self.chunk_overlap)
+            if expanded and budget - entry.chars <= 0:
+                break
+            seen.add(key)
+            budget -= entry.chars
+            expanded.append(_rescore(entry, hit.score))
+        return expanded or list(hits)
 
     # ---- 生成 ----
 
@@ -596,6 +698,11 @@ SYSTEM_PROMPT = """你是「示例用户」个人简历的问答助手，负责�
 3. 用简体中文回答，简洁分点；直接说自己想说的内容即可，不要在正文里写「片段 1」「第 2 页」
    这类来源标注，引用的出处会由界面单独展示。
 4. 语气客观中立，不要过度营销，也不要替候选人做出承诺（如到岗时间、薪资底线等片段中没有的内容）。
+5. 对方问的是某一整节时（如「有哪些项目经验」「介绍下工作经历」），片段里该节的条目要**全部列出**，
+   按「时间 · 名称（角色）」起头，再写关键内容；不要只挑其中一两条，也不要把「·索引」片段当成
+   正式内容照抄。条目多时用简洁的列表，不要为了省篇幅省略中间的项目。
+   简历如果分了几节写同类内容（例如【项目经历】之外还有【其他项目】），补充章节里的条目也要一并
+   列出——只有名称没有细节的，就按名称列出，不要因为细节少而整节跳过。
 """
 
 
@@ -744,6 +851,105 @@ def _with_scores(chunk: ResumeChunk, score: float, vector: float | None) -> Resu
         section=chunk.section,
         score=round(max(0.0, min(1.0, score)), 4),
         vector_score=None if vector is None else round(vector, 4),
+    )
+
+
+def _rescore(chunk: ResumeChunk, score: float) -> ResumeChunk:
+    """整节 / 补全出来的条目没有独立打分，沿用触发它的那次命中的分数。"""
+    return _with_scores(chunk, score=score, vector=None)
+
+
+def match_section(query: str) -> str | None:
+    """判断问题是不是在问某一个整节（「有哪些项目经验」→「项目经历」）。"""
+    normalized = re.sub(r"\s+", "", query or "")
+    if not normalized:
+        return None
+    for section, aliases in SECTION_QUERY_ALIASES.items():
+        if any(alias in normalized for alias in aliases):
+            return section
+    return None
+
+
+def match_sections(query: str) -> list[str]:
+    """整节提问要一起给出的章节：主体章节 + 它的补充章节。"""
+    section = match_section(query)
+    if section is None:
+        return []
+    return [section, *RELATED_SECTIONS.get(section, ())]
+
+
+def _is_index_chunk(chunk: ResumeChunk) -> bool:
+    """是否为「只列条目名」的索引片段。"""
+    first_line = _first_line(chunk.content)
+    return first_line.startswith("【") and _INDEX_ENTRY in first_line
+
+
+def _first_line(content: str) -> str:
+    return next((line.strip() for line in content.split("\n") if line.strip()), "")
+
+
+def _entry_header(chunk: ResumeChunk) -> str:
+    """条目首行（去掉 ``【章节】`` 前缀），如「2023.07-至今 语音助手 / 文本助手」。"""
+    lines = [line.strip() for line in chunk.content.split("\n") if line.strip()]
+    if lines and lines[0].startswith("【"):
+        lines = lines[1:]
+    return lines[0] if lines else ""
+
+
+def _entry_key(chunk: ResumeChunk) -> tuple[str | None, str]:
+    """把碎片归到所属条目：``(章节, 条目标题)``。索引片段单独归一类。"""
+    if _is_index_chunk(chunk):
+        return chunk.section, _INDEX_ENTRY
+    return chunk.section, _entry_header(chunk)
+
+
+def _group_by_entry(chunks: Sequence[ResumeChunk]) -> dict[tuple[str | None, str], list[ResumeChunk]]:
+    """同一条目的多个碎片连在一起（切分顺序即文档顺序）。"""
+    groups: dict[tuple[str | None, str], list[ResumeChunk]] = {}
+    for chunk in chunks:
+        groups.setdefault(_entry_key(chunk), []).append(chunk)
+    return groups
+
+
+def _strip_chunk_prefix(content: str, header: str) -> str:
+    """去掉续块开头重复的 ``【章节】`` 与条目标题，只留正文。"""
+    lines = content.split("\n")
+    if lines and lines[0].strip().startswith("【"):
+        lines = lines[1:]
+    if lines and header and lines[0].strip() == header:
+        lines = lines[1:]
+    return "\n".join(lines).strip()
+
+
+def _merge_group(group: Sequence[ResumeChunk], overlap: int) -> ResumeChunk:
+    """把同一条目被切开的碎片拼回完整一段，并去掉 chunk_overlap 造成的重复。"""
+    lead = group[0]
+    if len(group) == 1:
+        return lead
+
+    header = _entry_header(lead)
+    merged = lead.content
+    for chunk in group[1:]:
+        body = _strip_chunk_prefix(chunk.content, header)
+        if not body:
+            continue
+        # 切分器让相邻片段有 overlap 个字符的重叠，这里按最长公共部分削掉。
+        for size in range(min(len(body), overlap + 40), 0, -1):
+            if merged.endswith(body[:size]):
+                body = body[size:]
+                break
+        if not body:
+            continue
+        merged = f"{merged.rstrip()}\n{body.lstrip()}"
+
+    return ResumeChunk(
+        index=lead.index,
+        content=merged,
+        page=lead.page,
+        start_index=lead.start_index,
+        section=lead.section,
+        score=lead.score,
+        vector_score=lead.vector_score,
     )
 
 

@@ -216,6 +216,11 @@ curl -X POST http://localhost:8000/api/similarity \
    写入 `InMemoryVectorStore`；默认用中文模型 `BAAI/bge-small-zh-v1.5`（`RAG_EMBEDDING_MODEL`，
    留空则复用 `EMBEDDING_MODEL`）；
 4. **检索**：向量相似度 + BM25 关键词得分加权融合（0.6 / 0.4），取 `RAG_TOP_K`（默认 5）个片段；
+   命中后再做一次补全——问「有哪些项目经验」这类整节问题时，直接把该章节的条目全部取出，
+   并带上它的补充章节（【项目经历】+【其他项目】，【工作经历】+【实习经历】）；
+   4 个项目被切成 10 个碎片，只按相似度取 5 条会漏掉一半，末尾补充章节更是整节漏掉；
+   其余问题则把命中片段拼回完整条目，避免答案从半句话开始
+   （`RAG_SECTION_AWARE` / `RAG_MAX_CONTEXT_CHARS`）；
 5. **生成**：把片段拼进 Prompt 交给 DeepSeek，只允许依据片段作答，简历里没有的直接说明。
    答案正文不带「片段 x · 第 x 页」这类标注，来源由接口的 `sources` 字段单独返回、界面单独展示。
    system prompt 里会带上今天的日期，这样「2022.10-至今」才能判断出是否仍然在职。

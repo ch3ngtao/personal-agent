@@ -52,6 +52,8 @@ FastAPI 服务，提供两组能力：
 | `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` | `320` / `60` | LangChain 切分粒度与重叠字符数 |
 | `RAG_TOP_K` | `5` | 每次问答召回的片段数 |
 | `RAG_HYBRID` | `true` | 是否启用「向量 + BM25」混合检索 |
+| `RAG_SECTION_AWARE` | `true` | 整节提问（「有哪些项目经验」）时把该章节条目全部交给模型，并带上补充章节（项目经历 + 其他项目），避免 top-k 漏条目 |
+| `RAG_MAX_CONTEXT_CHARS` | `4000` | 章节扩展 / 条目补全后拼给模型的最大字符数 |
 | `RAG_CACHE_PATH` | `.cache/rag-index.json` | chunk 与向量的缓存文件，PDF 或参数变化自动失效 |
 | `RAG_PRELOAD` | `false` | 服务启动时就构建索引 |
 

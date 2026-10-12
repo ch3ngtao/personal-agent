@@ -45,3 +45,4 @@ deploy.conf
 
 # OS
 Thumbs.db
+certs/

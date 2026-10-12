@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { ApiOutlined } from '@ant-design/icons'
+import { GithubOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
-import ApiDemoDrawer from '../components/ApiDemoDrawer'
 import ChatWidget from '../components/chat/ChatWidget'
 import DatabaseSection, { type DatabaseRow } from '../components/notion/DatabaseSection'
 import DetailDrawer from '../components/notion/DetailDrawer'
@@ -21,7 +20,6 @@ import {
 
 export default function CareerSpace() {
   const [detail, setDetail] = useState<DetailView | null>(null)
-  const [apiOpen, setApiOpen] = useState(false)
 
   const openWork = (id: string) => {
     const item = workExperiences.find((work) => work.id === id)
@@ -79,8 +77,14 @@ export default function CareerSpace() {
   return (
     <div className="notion-page">
       <div className="notion-topbar">
-        <Button size="small" icon={<ApiOutlined />} onClick={() => setApiOpen(true)}>
-          API 演示
+        <Button
+          size="small"
+          icon={<GithubOutlined />}
+          href="https://github.com/ch3ngtao/personal-agent"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub
         </Button>
       </div>
 
@@ -158,7 +162,6 @@ export default function CareerSpace() {
       </div>
 
       <DetailDrawer detail={detail} onClose={() => setDetail(null)} />
-      <ApiDemoDrawer open={apiOpen} onClose={() => setApiOpen(false)} />
       <ChatWidget />
     </div>
   )

@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     rag_top_k: int = 5
     # 是否用「向量 + BM25」混合检索（中文短查询下比纯向量稳）。
     rag_hybrid: bool = True
+    # 章节级提问（如「有哪些项目经验」「工作经历」）直接把该章节的条目全部交给模型。
+    # 关掉就退回「只用 top-k 片段」，问一整节时容易只答出其中一两条。
+    rag_section_aware: bool = True
+    # 拼给模型的片段总字符上限（章节扩展 / 条目补全时用来兜底，避免上下文失控）。
+    rag_max_context_chars: int = 4000
     # true = 检索结果判定为答不了的问题转普通对话（而不是回「简历里没有找到相关信息」）。
     faq_router_enabled: bool = True
     # true = 服务启动时就构建索引。
