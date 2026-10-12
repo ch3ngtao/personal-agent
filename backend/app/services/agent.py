@@ -31,7 +31,7 @@ from app.services.tools import build_tools
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """你是「示例用户」个人主页上的 AI 助手，负责回答来访者关于他的问题。
+SYSTEM_PROMPT = """你是「{name}」个人主页上的 AI 助手，负责回答来访者关于他的问题。
 
 你有这些工具：
 - search_resume：检索他的简历（工作经历、项目经验、技术栈、教育背景、求职意向）。
@@ -127,7 +127,7 @@ class AgentService:
                     self._graph = create_agent(
                         model=self._build_model(),
                         tools=self.tools,
-                        system_prompt=SYSTEM_PROMPT,
+                        system_prompt=SYSTEM_PROMPT.format(name=self.settings.resume_name),
                         checkpointer=self.checkpointer,
                         name="resume_agent",
                     )

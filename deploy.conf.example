@@ -1,5 +1,12 @@
-# deploy.sh 的配置示例：复制为 deploy.conf 再按需修改。
-# deploy.conf 不会被提交到 git，也不会被上传到服务器。
+# deploy.sh 的配置示例。
+#
+# 现在服务器上跑两个环境，各自一份配置：
+#   deploy.hr.conf     见 deploy.hr.conf.example（ch3ngtao.top，自己的简历）
+#   deploy.public.conf 见 deploy.public.conf.example（lisi.ch3ngtao.top，对外）
+# 用法：./deploy.sh --env hr --init / ./deploy.sh --env public
+#
+# 不带 --env 时读这个 deploy.conf，属于旧的单环境用法，仍然可用。
+# 这些配置文件和 env/*.env 都不会被提交，也不会被上传到服务器的源码目录。
 
 # 服务器地址：user@host，或 ~/.ssh/config 里配置的别名
 DEPLOY_SSH=ubuntu@example.com
@@ -7,7 +14,8 @@ DEPLOY_SSH=ubuntu@example.com
 # SSH 端口
 DEPLOY_PORT=22
 
-# 服务器上的部署目录（写 ~ 或 /opt/... 都行，不要带空格）
+# 服务器上的部署目录（写 ~ 或 /opt/... 都行，不要带空格）。
+# 两个环境必须用不同目录：compose 项目名取自目录名，靠它区分容器与数据卷。
 DEPLOY_DIR=~/ch3ngtao-web
 
 # 私钥路径；用密码登录就留空
@@ -15,6 +23,24 @@ DEPLOY_KEY=
 
 # 只重建某个服务时填 web 或 api，留空表示两个都重建
 DEPLOY_SERVICES=
+
+# 该环境的环境变量文件（本地路径），会被上传成服务器上的 .env。
+# 见 env/hr.env.example 与 env/public.env.example。
+DEPLOY_ENV_FILE=
+
+# 部署完成后提示的访问地址（可选）
+DEPLOY_SITE_URL=
+
+# 该环境用的简历文件名；留空则读服务器 .env 里的 RESUME_FILE
+DEPLOY_RESUME_FILE=
+
+# 两个环境共用的 docker 网络名，默认 ch3ngtao-edge
+DEPLOY_EDGE_NETWORK=ch3ngtao-edge
+
+# 额外的「私人文件」名单（空格分隔）：这些文件不会随代码包上传，
+# 需要时用 ./deploy.sh --env <环境> --upload-resume 单独传。
+# 默认按 git 判断：没进 git 的 PDF 一律不上传。
+DEPLOY_PRIVATE_PDFS=
 
 # uv 基础镜像。国内服务器从 ghcr.io 拉可能极慢，填镜像加速地址即可：
 #   ghcr.m.daocloud.io/astral-sh/uv:latest

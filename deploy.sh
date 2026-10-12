@@ -12,6 +12,11 @@
 #   ./deploy.sh --logs [服务] 实时查看日志（api / web，默认全部）
 #   ./deploy.sh --help        查看说明
 #
+# 服务器上有两个环境，用 --env 选（对应 deploy.<名字>.conf）：
+#   ./deploy.sh --env hr --init        自己的（ch3ngtao.top），简历在服务器上传
+#   ./deploy.sh --env public --init    对外给外人看的（lisi.ch3ngtao.top），用仓库里的简历
+#   ./deploy.sh --env hr --upload-resume   把自己的简历 PDF 传到服务器（不进 git、不随代码上传）
+#
 # 服务器信息写在 deploy.conf（可参考 deploy.conf.example），
 # 也可以用同名环境变量临时覆盖，例如：
 #   DEPLOY_SSH=ubuntu@1.2.3.4 ./deploy.sh
@@ -19,7 +24,28 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONF_FILE="$ROOT_DIR/deploy.conf"
+
+# ---------- 先看有没有 --env：它决定读哪个配置文件 ----------
+_args=("$@")
+DEPLOY_ENV=""
+_i=0
+while [ "$_i" -lt "${#_args[@]}" ]; do
+  if [ "${_args[$_i]}" = "--env" ]; then
+    DEPLOY_ENV="${_args[$((_i + 1))]:-}"
+  fi
+  _i=$((_i + 1))
+done
+
+if [ -n "$DEPLOY_ENV" ]; then
+  CONF_FILE="$ROOT_DIR/deploy.$DEPLOY_ENV.conf"
+  if [ ! -f "$CONF_FILE" ]; then
+    printf '✗ 找不到 %s\n' "$CONF_FILE" >&2
+    printf '  可用的环境配置：%s\n' "$(cd "$ROOT_DIR" && ls deploy.*.conf 2>/dev/null | tr '\n' ' ')" >&2
+    exit 1
+  fi
+else
+  CONF_FILE="$ROOT_DIR/deploy.conf"
+fi
 
 # ---------- 配置（环境变量 → deploy.conf → 内置默认）----------
 # 先记下环境变量里显式传入的值，读完 deploy.conf 再盖回去（环境变量优先级最高）
@@ -32,6 +58,9 @@ ENV_DEPLOY_WEB_PORT="${DEPLOY_WEB_PORT:-}"
 ENV_DEPLOY_API_PORT="${DEPLOY_API_PORT:-}"
 ENV_DEPLOY_UV_IMAGE="${DEPLOY_UV_IMAGE:-}"
 ENV_DEPLOY_HF_ENDPOINT="${DEPLOY_HF_ENDPOINT:-}"
+ENV_DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-}"
+ENV_DEPLOY_SITE_URL="${DEPLOY_SITE_URL:-}"
+ENV_DEPLOY_RESUME_FILE="${DEPLOY_RESUME_FILE:-}"
 
 if [ -f "$CONF_FILE" ]; then
   # shellcheck disable=SC1090
@@ -47,11 +76,19 @@ fi
 [ -n "$ENV_DEPLOY_API_PORT" ] && DEPLOY_API_PORT="$ENV_DEPLOY_API_PORT"
 [ -n "$ENV_DEPLOY_UV_IMAGE" ] && DEPLOY_UV_IMAGE="$ENV_DEPLOY_UV_IMAGE"
 [ -n "$ENV_DEPLOY_HF_ENDPOINT" ] && DEPLOY_HF_ENDPOINT="$ENV_DEPLOY_HF_ENDPOINT"
+[ -n "$ENV_DEPLOY_ENV_FILE" ] && DEPLOY_ENV_FILE="$ENV_DEPLOY_ENV_FILE"
+[ -n "$ENV_DEPLOY_SITE_URL" ] && DEPLOY_SITE_URL="$ENV_DEPLOY_SITE_URL"
+[ -n "$ENV_DEPLOY_RESUME_FILE" ] && DEPLOY_RESUME_FILE="$ENV_DEPLOY_RESUME_FILE"
 
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
 DEPLOY_DIR="${DEPLOY_DIR:-~/ch3ngtao-web}"
 DEPLOY_WEB_PORT="${DEPLOY_WEB_PORT:-5173}"
 DEPLOY_API_PORT="${DEPLOY_API_PORT:-8000}"
+DEPLOY_ENV_FILE="${DEPLOY_ENV_FILE:-}"
+DEPLOY_SITE_URL="${DEPLOY_SITE_URL:-}"
+DEPLOY_RESUME_FILE="${DEPLOY_RESUME_FILE:-}"
+# 两个环境共用一张 docker 网络：入口环境的 nginx 通过它转发到对外环境
+DEPLOY_EDGE_NETWORK="${DEPLOY_EDGE_NETWORK:-ch3ngtao-edge}"
 
 # 允许写 ~ 或 $HOME：统一交给远程 shell 展开（本地展开会指到 Mac 的家目录）
 LOCAL_HOME="$HOME"
@@ -91,6 +128,7 @@ usage() {
 
 选项:
   -h, --help        显示本帮助
+      --env <名字>  选服务器上的哪个环境，对应 deploy.<名字>.conf
       --init        首次部署：创建远程目录、生成/补齐 .env（从本地 backend/.env 取 Key），
                     然后构建并启动。可重复执行，用来把新配置同步到服务器
       --no-build    只上传文件并重启容器，不重建镜像。源码/依赖改了不会生效，
@@ -106,9 +144,14 @@ usage() {
       --only <服务> 只重建并重启指定服务（web 或 api），另一个保持不动
       --host <值>   临时指定服务器，如 ubuntu@1.2.3.4 或 ssh 别名
       --dir <路径>  临时指定服务器上的部署目录
+      --upload-resume [文件]
+                    把自己的简历 PDF 上传到服务器（文件名默认取服务器 .env 里的
+                    RESUME_FILE）。这份简历不进 git，也不会随代码上传
+      --resume <文件> 指定简历文件名，配合 --upload-resume 使用
 
 配置文件:
-  deploy.conf（不会被提交，也不会被上传）可覆盖以下变量：
+  --env hr 读 deploy.hr.conf，--env public 读 deploy.public.conf，不带 --env 读 deploy.conf。
+  这些文件都不会被提交，也不会被上传，可覆盖以下变量：
     DEPLOY_SSH        服务器地址，user@host 或 ~/.ssh/config 里的别名
     DEPLOY_PORT       SSH 端口，默认 22
     DEPLOY_DIR        部署目录，默认 ~/ch3ngtao-web
@@ -119,6 +162,11 @@ usage() {
     DEPLOY_UV_IMAGE   uv 基础镜像，国内可填 ghcr 加速地址，如
                       ghcr.m.daocloud.io/astral-sh/uv:latest
     DEPLOY_HF_ENDPOINT 模型权重下载地址，国内填 https://hf-mirror.com
+    DEPLOY_ENV_FILE   该环境的环境变量文件（如 env/hr.env），会上传到服务器成为 .env
+    DEPLOY_SITE_URL   部署完提示的访问地址，如 https://ch3ngtao.top
+    DEPLOY_RESUME_FILE 该环境用的简历文件名（默认取服务器 .env 里的 RESUME_FILE）
+    DEPLOY_EDGE_NETWORK 两个环境共用的 docker 网络名，默认 ch3ngtao-edge
+    DEPLOY_PRIVATE_PDFS 逗号或空格分隔的简历文件名，这些文件不会随代码上传
 EOF
 }
 
@@ -131,6 +179,7 @@ FORCE_ENV=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
+    --env) [ $# -ge 2 ] || die "--env 需要一个值（如 hr / public）"; DEPLOY_ENV="$2"; shift 2 ;;
     --init) MODE=init; shift ;;
     --no-build) BUILD_FLAG=""; shift ;;
     --restart) MODE=restart; shift ;;
@@ -138,6 +187,14 @@ while [ $# -gt 0 ]; do
     --detach) DETACH=1; shift ;;
     --build-log) MODE=buildlog; shift ;;
     --status) MODE=status; shift ;;
+    --upload-resume)
+      MODE=uploadresume; shift
+      # 可选：紧跟一个文件名
+      if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+        DEPLOY_RESUME_FILE="$1"; shift
+      fi
+      ;;
+    --resume) [ $# -ge 2 ] || die "--resume 需要一个文件名"; DEPLOY_RESUME_FILE="$2"; shift 2 ;;
     --logs)
       MODE=logs; shift
       # 可选的服务名紧跟其后
@@ -183,6 +240,15 @@ ssh_exec_tty() {
   fi
 }
 
+# 传单个文件（用于把简历 PDF 单独上传，不走代码包）
+scp_put() {
+  if [ -n "$DEPLOY_KEY" ]; then
+    scp -P "$DEPLOY_PORT" -i "$DEPLOY_KEY" $SSH_COMMON_OPTS "$1" "$DEPLOY_SSH:$2"
+  else
+    scp -P "$DEPLOY_PORT" $SSH_COMMON_OPTS "$1" "$DEPLOY_SSH:$2"
+  fi
+}
+
 preflight() {
   [ "$PREFLIGHT_DONE" = "1" ] && return 0
   require_target
@@ -224,7 +290,50 @@ TAR_EXCLUDES=(
 )
 
 pack_and_send() {
+  collect_private_pdf_excludes
   COPYFILE_DISABLE=1 tar "${TAR_EXCLUDES[@]}" -czf - -C "$ROOT_DIR" . | ssh_exec "$1"
+}
+
+# 只上传 git 里跟踪的 PDF：自己的真实简历不进 git，也就不该随代码包上传，
+# 需要它时用 ./deploy.sh --upload-resume 单独传（或按 deploy.conf 里的 DEPLOY_PRIVATE_PDFS 指定）
+is_declared_private_pdf() {
+  local needle="$1" item
+  [ -n "${DEPLOY_PRIVATE_PDFS:-}" ] || return 1
+  for item in $DEPLOY_PRIVATE_PDFS; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+collect_private_pdf_excludes() {
+  local file name
+  for file in "$ROOT_DIR"/*.pdf; do
+    [ -e "$file" ] || continue
+    name="$(basename "$file")"
+    if is_declared_private_pdf "$name"; then
+      TAR_EXCLUDES+=("--exclude=$name")
+      continue
+    fi
+    if git -C "$ROOT_DIR" rev-parse --git-dir >/dev/null 2>&1 &&
+       ! git -C "$ROOT_DIR" ls-files --error-unmatch -- "$name" >/dev/null 2>&1; then
+      TAR_EXCLUDES+=("--exclude=$name")
+    fi
+  done
+}
+
+# 服务器上的简历 PDF 检查：自己的简历不进代码包，少了要在构建前说清楚
+remote_resume_check() {
+  cat <<EOF
+resume="\$(sed -n 's/^RESUME_FILE=//p' .env 2>/dev/null | head -1 | tr -d '\r')"
+resume="\${resume:-简历-李四.pdf}"
+if [ ! -f "\$resume" ]; then
+  echo "✗ 服务器上缺少简历 PDF：$DEPLOY_DIR/\$resume"
+  echo "  自己的简历不进 git、也不随代码上传，先单独传一次："
+  echo "    ./deploy.sh ${DEPLOY_ENV:+--env $DEPLOY_ENV }--upload-resume"
+  exit 1
+fi
+echo "✓ 简历：\$resume"
+EOF
 }
 
 remote_health_lines() {
@@ -244,11 +353,18 @@ set -e
 mkdir -p $DEPLOY_DIR
 tar -xzf - -C $DEPLOY_DIR
 cd $DEPLOY_DIR
+# 两个环境共用一张 docker 网络（入口环境的 nginx 用它转发到对外环境）
+docker network create $DEPLOY_EDGE_NETWORK >/dev/null 2>&1 || true
+$(remote_resume_check)
 $REMOTE_COMPOSE up -d $1 $DEPLOY_SERVICES
 EOF
 }
 
 show_url() {
+  if [ -n "$DEPLOY_SITE_URL" ]; then
+    ok "访问地址：${DEPLOY_SITE_URL}"
+    return 0
+  fi
   local host="${DEPLOY_SSH##*@}"
   ok "访问地址：http://${host}:${DEPLOY_WEB_PORT}"
 }
@@ -284,6 +400,8 @@ restart_only() {
   log "重启容器（不上传代码）..."
   ssh_exec "set -e
 cd $DEPLOY_DIR
+docker network create $DEPLOY_EDGE_NETWORK >/dev/null 2>&1 || true
+$(remote_resume_check)
 $REMOTE_COMPOSE up -d $DEPLOY_SERVICES
 $(remote_health_lines)" || die "重启失败，请查看上面的远程输出"
   ok "重启完成"
@@ -313,6 +431,8 @@ transfer_detached() {
 mkdir -p $DEPLOY_DIR
 tar -xzf - -C $DEPLOY_DIR
 cd $DEPLOY_DIR
+docker network create $DEPLOY_EDGE_NETWORK >/dev/null 2>&1 || true
+$(remote_resume_check)
 nohup sh -c '$REMOTE_COMPOSE up -d $1 $DEPLOY_SERVICES' < /dev/null > build.log 2>&1 &
 sleep 1
 echo BUILD-STARTED"
@@ -352,24 +472,37 @@ resolve_api_key() {
   printf '%s' "$key"
 }
 
+# 组成要写到服务器 .env 的内容：
+# 有 DEPLOY_ENV_FILE 就用它（每个环境一份，如 env/hr.env），否则退回旧的拼法
+build_env_payload() {
+  local key="$1"
+
+  if [ -n "$DEPLOY_ENV_FILE" ]; then
+    local file="$DEPLOY_ENV_FILE"
+    case "$file" in
+      /*) ;;
+      *) file="$ROOT_DIR/$file" ;;
+    esac
+    [ -f "$file" ] || die "DEPLOY_ENV_FILE 指向的文件不存在：$file"
+    cat "$file"
+    [ -n "$key" ] && printf '\nDEEPSEEK_API_KEY=%s\n' "$key"
+    return 0
+  fi
+
+  printf 'DEEPSEEK_API_KEY=%s\n' "$key"
+  printf 'DEEPSEEK_BASE_URL=https://api.deepseek.com\n'
+  printf 'DEEPSEEK_MODEL=deepseek-chat\n'
+  printf 'TZ=Asia/Shanghai\n'
+  printf 'TIMEZONE=Asia/Shanghai\n'
+  [ -n "$DEPLOY_UV_IMAGE" ] && printf 'UV_IMAGE=%s\n' "$DEPLOY_UV_IMAGE"
+  [ -n "$DEPLOY_HF_ENDPOINT" ] && printf 'HF_ENDPOINT=%s\n' "$DEPLOY_HF_ENDPOINT"
+  return 0
+}
+
 write_remote_env() {
   local key="$1"
   local payload
-  payload="DEEPSEEK_API_KEY=$key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-TZ=Asia/Shanghai
-TIMEZONE=Asia/Shanghai"
-
-  if [ -n "$DEPLOY_UV_IMAGE" ]; then
-    payload="$payload
-UV_IMAGE=$DEPLOY_UV_IMAGE"
-  fi
-
-  if [ -n "$DEPLOY_HF_ENDPOINT" ]; then
-    payload="$payload
-HF_ENDPOINT=$DEPLOY_HF_ENDPOINT"
-  fi
+  payload="$(build_env_payload "$key")"
 
   log "检查服务器上的 .env ..."
   local out
@@ -439,6 +572,35 @@ init_deploy() {
   deploy_transfer "--build"
 }
 
+# ---------- 单独上传简历 ----------
+# 自己的简历不进 git，也不随代码包上传，用这个命令单独传一次；
+# 传完要重建前端镜像才会生效（简历数据是构建时生成的）。
+upload_resume() {
+  preflight
+
+  local name="$DEPLOY_RESUME_FILE"
+  if [ -z "$name" ]; then
+    name="$(ssh_exec "sed -n 's/^RESUME_FILE=//p' $DEPLOY_DIR/.env 2>/dev/null | head -1" | tr -d '\r')"
+  fi
+  [ -n "$name" ] || name="简历-李四.pdf"
+
+  local local_path="$name"
+  case "$local_path" in
+    /*) ;;
+    *) local_path="$ROOT_DIR/$name" ;;
+  esac
+
+  [ -f "$local_path" ] || die "本地找不到简历：${local_path}（用 --resume <文件名> 指定，或在 deploy.conf 里配 DEPLOY_RESUME_FILE）"
+
+  log "上传简历：$name → ${DEPLOY_SSH}:${DEPLOY_DIR}/"
+  ssh_exec "mkdir -p $DEPLOY_DIR" || die "连接服务器失败"
+  scp_put "$local_path" "$DEPLOY_DIR/$name" || die "上传失败"
+  ok "已上传 $name"
+  warn "换了简历要让它生效：先重建前端（页面数据是构建时生成的），再重启让后端重新读简历——"
+  warn "  ./deploy.sh${DEPLOY_ENV:+ --env $DEPLOY_ENV} --only web"
+  warn "  ./deploy.sh${DEPLOY_ENV:+ --env $DEPLOY_ENV} --restart"
+}
+
 # ---------- 入口 ----------
 case "$MODE" in
   init)    init_deploy ;;
@@ -447,4 +609,5 @@ case "$MODE" in
   buildlog) show_build_log ;;
   status)  show_status ;;
   logs)    show_logs ;;
+  uploadresume) upload_resume ;;
 esac

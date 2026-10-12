@@ -7,7 +7,7 @@
    （官方的 ``PyPDFLoader`` 来自已停止维护的 ``langchain-community``，这里直接用底层
    ``pypdf``，少一个依赖也少一条弃用告警。）
 2. **切分**：先按简历的章节标题（求职意向 / 相关技能 / 工作经历 / 项目经历 …）和
-   日期开头的条目（如「2022.10-至今 示例科技」）切成语义块，再用
+   日期开头的条目（如「2022.10-至今 XX 公司」）切成语义块，再用
    ``RecursiveCharacterTextSplitter`` 按「段落 → 换行 → 中文标点」递归切到目标粒度。
    每个 chunk 会带上所属章节（有时还有所属公司 / 项目）作为上下文前缀，
    否则「他现在在哪家公司」这类问题会因为公司名和经历详情被切散而召回不到。
@@ -76,7 +76,7 @@ SECTION_TITLES = (
 _SECTION_RE = re.compile(
     r"^(?P<title>" + "|".join(sorted(SECTION_TITLES, key=len, reverse=True)) + r")\s*(?:[：:]\s*(?P<rest>.*))?$"
 )
-# 「2022.10-至今 示例科技」「2014.9-2018.7 示例大学」这类条目起始行。
+# 「2022.10-至今 XX 公司」「2014.9-2018.7 XX 学院」这类条目起始行。
 _ENTRY_RE = re.compile(
     r"^\d{4}\s*[./\-年]\s*\d{1,2}(?:\s*月)?\s*[-–—~至]\s*(?:\d{4}|至今|现在|present)",
     re.IGNORECASE,
@@ -84,7 +84,9 @@ _ENTRY_RE = re.compile(
 
 # 找 PDF 的顺序：仓库根目录 → backend/data → backend 目录。
 PDF_SEARCH_DIRS = (REPO_ROOT, BACKEND_DIR / "data", BACKEND_DIR)
-DEFAULT_PDF_NAME = "简历-AI前端-示例用户.pdf"
+# 什么都没配时的兜底简历：仓库里跟踪的对外版本（只为「光跑后端、不带任何配置」的场景）。
+# 部署和本地开发都由配置决定用哪份：RESUME_PDF_PATH 优先，其次是 RESUME_FILE。
+DEFAULT_PDF_NAME = "简历-李四.pdf"
 
 # 切分策略版本：策略一变，旧缓存自动失效。
 CHUNKING_STRATEGY = "section-aware-v1"
@@ -263,9 +265,20 @@ class ResumeIndex:
         self._bm25: BM25 | None = None
         self._bm25_index: int | None = None
 
-        self.pdf_path = self.resolve_pdf_path(self.settings.resume_pdf_path)
+        self.pdf_path = self.resolve_pdf_path(self.settings.resume_pdf_path, self.settings.resume_file)
 
     # ---- 路径 ----
+
+    @property
+    def resume_label(self) -> str:
+        """日志 / 排查里用哪个名字称呼当前这份简历。
+
+        优先用配置的 RESUME_FILE：容器里挂载后路径统一是 /app/resume.pdf，
+        只打路径看不出这个环境用的是哪一份。
+        """
+        if self.settings.resume_file:
+            return str(self.settings.resume_file)
+        return self.pdf_path.name if self.pdf_path else "未配置"
 
     @staticmethod
     def _resolve_cache_path(raw: str) -> Path:
@@ -273,12 +286,17 @@ class ResumeIndex:
         return path if path.is_absolute() else (BACKEND_DIR / path)
 
     @staticmethod
-    def resolve_pdf_path(configured: str | None) -> Path | None:
-        """按「显式配置 → 仓库根目录 → backend/data → backend」的顺序找简历 PDF。"""
+    def resolve_pdf_path(configured: str | None, filename: str | None = None) -> Path | None:
+        """按「RESUME_PDF_PATH → RESUME_FILE → 仓库根目录 / backend/data / backend 里的 PDF」找简历。
+
+        用哪份简历完全由配置决定，代码里只有最后那个兜底默认值。
+        """
         candidates: list[Path] = []
 
-        if configured:
-            raw = Path(configured).expanduser()
+        for value in (configured, filename):
+            if not value:
+                continue
+            raw = Path(str(value)).expanduser()
             candidates.extend([raw] if raw.is_absolute() else [raw, BACKEND_DIR / raw, REPO_ROOT / raw])
 
         for directory in PDF_SEARCH_DIRS:
@@ -294,7 +312,9 @@ class ResumeIndex:
     def _require_pdf(self) -> Path:
         if self.pdf_path is None or not self.pdf_path.is_file():
             searched = ", ".join(str(path) for path in PDF_SEARCH_DIRS)
-            raise ResumePdfNotFoundError(f"找不到简历 PDF，请在 .env 里配置 RESUME_PDF_PATH（已搜索：{searched}）")
+            raise ResumePdfNotFoundError(
+                f"找不到简历 PDF，请在 .env 里配置 RESUME_FILE 或 RESUME_PDF_PATH（已搜索：{searched}）"
+            )
         return self.pdf_path
 
     # ---- 构建 ----
@@ -490,7 +510,7 @@ class ResumeIndex:
             try:
                 data = self._load_cache()
                 if data is None:
-                    logger.info("正在构建简历索引：%s", self.pdf_path)
+                    logger.info("正在构建简历索引：%s（配置的简历文件：%s）", self.pdf_path, self.resume_label)
                     data = self._build()
                     logger.info("简历索引构建完成：%s 个 chunk", len(data.chunks))
                 else:
@@ -681,7 +701,8 @@ class ResumeIndex:
         )
         # 简历里常写「2022.10-至今」，模型需要知道今天是几号才能判断是否仍然在职。
         today = clock.describe(with_time=False)
-        system = f"{SYSTEM_PROMPT}\n\n今天的日期是 {today}，判断「至今」「最近」这类表述时以此为准。"
+        prompt = SYSTEM_PROMPT.format(name=self.settings.resume_name)
+        system = f"{prompt}\n\n今天的日期是 {today}，判断「至今」「最近」这类表述时以此为准。"
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
         if history:
             messages.extend(history)
@@ -689,7 +710,7 @@ class ResumeIndex:
         return messages
 
 
-SYSTEM_PROMPT = """你是「示例用户」个人简历的问答助手，负责回答来访者关于这份简历的问题。
+SYSTEM_PROMPT = """你是「{name}」个人简历的问答助手，负责回答来访者关于这份简历的问题。
 
 规则：
 1. 只依据下面提供的简历片段回答，片段里没有的信息一律不要编造，也不要用你的先验知识补充。
@@ -740,7 +761,7 @@ class _Block:
 def _collect_blocks(pages: Sequence[tuple[int, str]]) -> list[_Block]:
     """把逐页文本按「章节标题 + 日期条目」切成语义块。
 
-    简历的排版经常把「工作经历 / 2022.10-至今 示例科技」放在页尾、把详情放到下一页，
+    简历的排版经常把「工作经历 / 2022.10-至今 XX 公司」放在页尾、把详情放到下一页，
     逐页切分会把公司名和它的工作内容拆到两个 chunk 里。这里先按结构切块，
     再让后续的递归切分只在块内部生效，保证一条经历不会被切散。
     """

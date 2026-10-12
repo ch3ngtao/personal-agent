@@ -38,7 +38,7 @@ def build_tools() -> list[BaseTool]:
 
     @tool(response_format="content_and_artifact")
     def search_resume(query: str, top_k: int = 5) -> tuple[str, dict[str, Any]]:
-        """在「示例用户的简历」里检索信息：工作经历、项目经验、技术栈、教育背景、求职意向等。
+        """在「候选人的简历」里检索信息：工作经历、项目经验、技术栈、教育背景、求职意向等。
 
         任何和候选人本人经历、技能、背景相关的问题都应该先用这个工具查一次，
         不要凭常识或对话历史直接回答简历相关的问题。

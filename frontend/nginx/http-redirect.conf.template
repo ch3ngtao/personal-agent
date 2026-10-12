@@ -1,0 +1,13 @@
+# HTTP：一律跳转到 HTTPS（证书续期用的目录除外）
+server {
+    listen 80;
+    server_name {{SERVER_NAME}};
+
+    location /.well-known/acme-challenge/ {
+        root /usr/share/nginx/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

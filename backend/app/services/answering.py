@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from app.core import clock
+from app.core.config import get_settings
 from app.services.llm import DeepSeekService
 from app.services.rag import ResumeChunk, ResumeIndex
 
@@ -39,7 +40,7 @@ ROUTER_SYSTEM_PROMPT = """你在判断「检索到的简历片段」能不能回
 # 转普通对话时的 prompt。注意两个点：
 # 1. 注入当前时间——大模型自己没有时钟，不注入就只能瞎猜或拒答；
 # 2. 明确告诉它这次没有简历资料，避免凭空编造候选人的经历。
-CHAT_SYSTEM_PROMPT = """你是「示例用户」个人主页上的 AI 助手。现在是 {now}。
+CHAT_SYSTEM_PROMPT = """你是「{name}」个人主页上的 AI 助手。现在是 {now}。
 
 对方这个问题没有在简历资料里找到依据，所以这次不引用简历，用你的通用能力回答：
 - 用简体中文，简洁准确，必要时分点。
@@ -47,7 +48,7 @@ CHAT_SYSTEM_PROMPT = """你是「示例用户」个人主页上的 AI 助手。�
 - 涉及日期、时间、星期、相对时间时，一律以上面给出的当前时间为准——你自己没有时钟，
   不要凭记忆猜，也不要说「拿不到时间」。答案里的时间可能比真实时间晚几秒（生成需要耗时），
   精确到分钟即可，不确定就说明是大约时间。
-- 绝对不要编造示例用户的经历、技能、学历、求职意向等信息——这次你手上没有他的资料。
+- 绝对不要编造{name}的经历、技能、学历、求职意向等信息——这次你手上没有他的资料。
   如果对方问的正是这些，就直接说明这次没有查到，建议他换个问法或直接联系本人。"""
 
 
@@ -74,9 +75,8 @@ def build_chat_messages(
     history: Sequence[dict[str, Any]] | None = None,
     moment: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": CHAT_SYSTEM_PROMPT.format(now=clock.describe(moment))}
-    ]
+    system = CHAT_SYSTEM_PROMPT.format(now=clock.describe(moment), name=get_settings().resume_name)
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": question})

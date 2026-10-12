@@ -14,13 +14,16 @@
 
 ```
 ch3ngtao-web/
+├── env/                 # 每个环境一份环境变量（*.example 进 git，实际用的不进）
 ├── frontend/            # React + antd 前端
 │   ├── src/
 │   │   ├── api/         # 后端接口封装
 │   │   ├── components/  # 页面组件（Notion 列表 / 抽屉 / 右下角会话气泡）
-│   │   └── App.tsx      # 演示页：向量相似度 + DeepSeek 对话
-│   ├── Dockerfile       # 构建后由 nginx 托管
-│   └── nginx.conf       # SPA 路由 + /api 反向代理（支持 SSE）
+│   │   ├── data/        # 简历数据入口 + 类型 + 兜底数据（数据由脚本生成）
+│   │   └── pages/       # Notion 风格的个人职业空间页面
+│   ├── scripts/         # generate-resume-data.mjs：构建时用大模型生成简历数据
+│   ├── nginx/           # 站点 / 入口 / 子域名三种 nginx 配置模板
+│   └── Dockerfile       # 构建后由 nginx 托管
 ├── backend/             # FastAPI 后端
 │   ├── app/
 │   │   ├── api/routes/  # health / embeddings / chat / faq / agent 路由
@@ -28,7 +31,9 @@ ch3ngtao-web/
 │   │   └── services/    # 向量模型 + DeepSeek 客户端 + RAG（rag.py）+ Agent
 │   ├── pyproject.toml   # uv 管理依赖
 │   └── Dockerfile
-└── docker-compose.yml   # api + web 一键启动
+├── docker-compose.yml   # api + web，一份 compose 跑两个环境（靠 .env 区分）
+├── deploy.sh            # 一键部署（--env hr / --env public）
+└── 简历-李四.pdf        # 对外的简历（进 git）；自己的简历只留在本地 / 服务器
 ```
 
 ## 环境要求
@@ -90,9 +95,43 @@ npm run dev
 
 打开 <http://localhost:5173>。
 
+## 简历数据是怎么来的
+
+页面上那份结构化简历（`frontend/src/data/resume.generated.ts`）不在版本库里，是**构建时**生成的：
+
+1. 按 `RESUME_FILE`（或 `RESUME_NAME`）找到仓库根目录的简历 PDF；
+2. 抽 PDF 文本交给 DeepSeek，按固定结构输出 JSON，再本地校验（字段、类型、id 唯一性）；
+3. 渲染成 `resume.generated.ts`。页面照旧从 `data/resume.ts` 取数据，组件不用改。
+
+省钱省时的关键：生成结果按「PDF 内容哈希 + 生成规则版本 + 模型名」缓存（镜像构建缓存里的
+`.resume-cache`）。**简历没更新就直接复用上一次的结果，不再调用大模型**；只有简历内容变了才
+重新生成一次。`RESUME_GEN_STRICT=1` 时生成失败会让构建失败（自己的简历用这个，避免悄悄用错
+数据）；否则退回 `resume.default.json`（公开版本）并在日志里告警。
+
+相关文件：
+
+| 文件 | 作用 |
+| --- | --- |
+| `frontend/scripts/generate-resume-data.mjs` | 生成脚本，也可手动跑 `npm run gen:data` |
+| `frontend/src/data/resume.types.ts` | 数据结构定义（手写、稳定） |
+| `frontend/src/data/resume.default.json` | 兜底数据（公开版本，也是模型输出格式的示例） |
+| `frontend/src/data/resume.ts` | 页面入口：类型 + 数据 + 详情组装 |
+
+本地开发默认用仓库里的 `简历-李四.pdf`。想用自己的简历：
+
+```bash
+# 前端页面数据
+cd frontend && RESUME_FILE=你自己的简历.pdf npm run dev
+# 后端 RAG（backend/.env）
+# RESUME_FILE=你自己的简历.pdf
+# 助手提示词里的称呼
+# RESUME_NAME=你的名字
+```
+
 ## 容器化运行
 
 ```bash
+docker network create ch3ngtao-edge   # 两个环境共用一张网络，只需建一次
 cp .env.example .env        # 填入 DEEPSEEK_API_KEY
 docker compose up --build
 ```
@@ -102,36 +141,79 @@ docker compose up --build
 
 模型权重会下载到名为 `hf-cache` 的 Docker 卷中，RAG 索引缓存在 `rag-cache` 卷中，
 容器重建不会重复下载 / 重建。简历 PDF 通过只读挂载进入容器（`RESUME_PDF_PATH=/app/resume.pdf`），
-文件名或路径不同时改根目录 `.env` 即可。
+用哪份由 `.env` 里的 `RESUME_FILE` 决定——它同时决定前端页面数据和后端 RAG 索引。
 
 ## 部署到服务器
 
 服务器只需要装 Docker（含 compose 插件），不需要 Node / Python / git。`deploy.sh` 会把本地
-代码打包上传（自动跳过 `node_modules`、`.venv`、`.env` 等），再在服务器上构建镜像并启动容器。
+代码打包上传（自动跳过 `node_modules`、`.venv`、`.env` 等；**没进 git 的简历 PDF 也不会被上传**），
+再在服务器上构建镜像并启动容器。
+
+### 两个环境
+
+同一份代码 + 两个目录 + 两套 `.env`，容器、数据卷、镜像、端口互相独立：
+
+| 环境 | 部署目录 | 域名 | 简历 | 角色 |
+| --- | --- | --- | --- | --- |
+| 自己的 | `/opt/ch3ngtao-web` | `ch3ngtao.top` | 你自己那份（只在本地与服务器上，不进 git） | 入口：自己收 HTTPS，并把子域名转发出去 |
+| 对外 | `/opt/ch3ngtao-public` | `lisi.ch3ngtao.top` | `简历-李四.pdf`（仓库里跟踪） | 站点：只监听 80，由入口环境转发 |
+
+一台机器上 80/443 只能被一个容器占用，所以让「自己的」那个环境当入口：它顺手把
+`lisi.ch3ngtao.top` 转发给对外环境的前端容器。两个环境共用一张 docker 网络
+`ch3ngtao-edge`（`deploy.sh` 会自动创建）。
+
+配置分两层，都不进 git：
+
+| 文件 | 内容 | 示例 |
+| --- | --- | --- |
+| `deploy.hr.conf` / `deploy.public.conf` | 服务器地址、部署目录、用哪份简历 | `deploy.*.conf.example` |
+| `env/hr.env` / `env/public.env` | 简历文件名、域名、端口、CORS、模型 | `env/*.env.example` |
+
+`env/*.env` 会被上传成服务器上的 `.env`，server 端的 compose 直接读它。
+
+### 首次部署
 
 ```bash
-cp deploy.conf.example deploy.conf   # 填 DEPLOY_SSH=user@host，其余按需改
-./deploy.sh --init                   # 首次部署：建目录、生成 .env、构建、启动
+cp env/hr.env.example env/hr.env             # 按需改：简历文件名、域名
+cp deploy.hr.conf.example deploy.hr.conf     # 填 DEPLOY_SSH=user@host
+
+./deploy.sh --env hr --upload-resume         # 自己的简历单独传上去（不进 git、不随代码上传）
+./deploy.sh --env hr --init                  # 建目录、生成 .env、构建、启动
+```
+
+对外环境（简历在仓库里，不需要上传）：
+
+```bash
+cp env/public.env.example env/public.env
+cp deploy.public.conf.example deploy.public.conf
+./deploy.sh --env public --init
 ```
 
 日常更新和排查：
 
 ```bash
-./deploy.sh                # 上传代码 + 重新构建 + 重启 + 健康检查
-./deploy.sh --no-build     # 只上传代码并重启容器（依赖没变时更快）
-./deploy.sh --restart      # 不上传代码，只重启（改了服务器上的 .env 时用）
-./deploy.sh --status       # 看容器状态与健康检查
-./deploy.sh --logs api     # 实时日志，可跟 api 或 web
+./deploy.sh --env hr                  # 上传代码 + 重新构建 + 重启 + 健康检查
+./deploy.sh --env public --no-build   # 只上传文件并重启（不重建镜像）
+./deploy.sh --env hr --restart        # 不上传代码，只重启（改了服务器上的 .env 时用）
+./deploy.sh --env public --status     # 看某个环境的容器状态
+./deploy.sh --env public --logs api   # 实时日志，可跟 api 或 web
+./deploy.sh --env hr --only web       # 只重建前端（换了简历、页面上要生效时用这个）
 ```
 
 几处约定：
 
-- 服务器地址、端口、部署目录都写在 `deploy.conf`（已被 `.gitignore` 忽略，也不会被上传），
-  也可以用 `--host` / `--dir` 临时覆盖，或用同名环境变量覆盖。
-- `.env` 只在服务器上生成一次，之后本地不会再覆盖它；里面存着 `DEEPSEEK_API_KEY`。
+- 自己的简历不进 git、也不随代码包上传：先 `--upload-resume` 传到服务器，之后正常部署即可。
+  服务器上少了这份文件，构建前就会直接报错并提示这条命令。
+- 简历换了要两步生效：`./deploy.sh --env hr --only web`（页面数据是构建时生成的）+
+  `./deploy.sh --env hr --restart`（让后端重新读简历建索引）。
+- 子域名需要两件准备：DNS 里把 `lisi.ch3ngtao.top` 解析到服务器；证书放到
+  `/opt/ch3ngtao-web/certs/`，命名 `extra-fullchain.pem` 与 `extra-privkey.pem`
+  （入口环境的 `fullchain.pem` / `privkey.pem` 仍用于主域名）。
+- 端口分配：自己的环境对外 80 / 443，API 只绑本机 8000；对外环境只绑本机 8081 / 8001。
+- `.env` 只在服务器上生成一次，之后不会覆盖已有值（要按本地覆盖加 `--force-env`）。
 - 源码、依赖、nginx 配置都打包进镜像，改动后必须走默认模式重新构建；`--no-build` 只用于
   「代码没变、只是换了被挂载的文件」的场景（比如更新了根目录的简历 PDF）。
-- 记得在云厂商安全组和服务器防火墙上放行对外端口（默认 `5173`）。
+- 记得在云厂商安全组和服务器防火墙上放行 80 / 443。
 
 ### 首次构建很慢怎么办
 
@@ -150,14 +232,14 @@ cp deploy.conf.example deploy.conf   # 填 DEPLOY_SSH=user@host，其余按需�
   里两个服务的 `build.network` 都设成了 `host`，依赖层构建从 50 多分钟降到 48 秒。换成网络正常的机器时
   这条也可以去掉。
 - **ghcr.io 极慢**。uv 的镜像来自 `ghcr.io`，国内服务器实测 20MB 要 20 多分钟。在
-  `deploy.conf` 里设 `DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest`
+  `deploy.hr.conf`（或 `deploy.public.conf`）里设 `DEPLOY_UV_IMAGE=ghcr.m.daocloud.io/astral-sh/uv:latest`
   （或 `ghcr.nju.edu.cn/astral-sh/uv:latest`）走加速，改完必须重新构建才生效。
 - **PyPI 换镜像源没用**。依赖的下载地址写在 `uv.lock` 里，`uv sync --frozen` 只认锁文件
   里的 URL，改索引地址不会改变下载来源，这部分只能等首次下载完（uv 缓存会保留已下载的包，
   中断后重跑能接着来）。
 - **模型权重连不上 HuggingFace**。向量模型（简历 FAQ 的中文模型、向量演示的 MiniLM）都从
   `huggingface.co` 下载，国内服务器常见 `[Errno 101] Network is unreachable`，症状是问答
-  接口一直挂着不返回。在 `deploy.conf` 里设 `DEPLOY_HF_ENDPOINT=https://hf-mirror.com`，
+  接口一直挂着不返回。在 `deploy.hr.conf` / `deploy.public.conf` 里设 `DEPLOY_HF_ENDPOINT=https://hf-mirror.com`，
   然后跑一次 `./deploy.sh --init`（会把缺的配置补进服务器 `.env` 并重启，不会覆盖已有值）。
   模型下载一次后会存在 `hf-cache` 卷里，之后不再下载。
 
@@ -212,7 +294,7 @@ curl -X POST http://localhost:8000/api/similarity \
 
 1. **读取**：`pypdf` 逐页读取简历 PDF，每页包成 LangChain 的 `Document`，保留页码；
 2. **切分**：先按简历章节（求职意向 / 相关技能 / 工作经历 / 项目经历 …）和日期条目
-   （如「2022.10-至今 示例科技」）切成语义块，再用 `RecursiveCharacterTextSplitter`
+   （如「2022.10-至今 XX 公司」）切成语义块，再用 `RecursiveCharacterTextSplitter`
    递归切到默认 320 字 / 重叠 60 字（`RAG_CHUNK_SIZE`、`RAG_CHUNK_OVERLAP`）；
    每个片段会带上所属章节（有时还有公司 / 项目）作为上下文，多条目章节还会额外生成一条
    只列「时间 + 公司 / 项目 + 职位」的索引片段；

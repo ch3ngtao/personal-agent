@@ -7,6 +7,10 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "gen:data": "node scripts/generate-resume-data.mjs",
+    "predev": "node scripts/generate-resume-data.mjs",
+    "prebuild": "node scripts/generate-resume-data.mjs",
+    "pretypecheck": "node scripts/generate-resume-data.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
@@ -30,6 +34,7 @@
     "globals": "^17.13.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.1",
+    "unpdf": "^1.8.1",
     "vite": "^8.3.4"
   }
 }

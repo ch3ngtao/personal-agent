@@ -233,6 +233,28 @@ if ! grep -qE '^DEEPSEEK_API_KEY=.+' "$BACKEND_DIR/.env" 2>/dev/null; then
   warn "backend/.env 中的 DEEPSEEK_API_KEY 为空，对话接口会返回 503（向量接口不受影响）"
 fi
 
+# 页面数据与 RAG 用哪份简历：默认仓库里的对外版本，可用 RESUME_FILE 换成本地那份
+DEFAULT_RESUME_FILE="简历-李四.pdf"
+RESUME_FILE="${RESUME_FILE:-$DEFAULT_RESUME_FILE}"
+export RESUME_FILE
+if [ -f "$ROOT_DIR/$RESUME_FILE" ]; then
+  # 前后端都用同一份简历，页面上看到什么，问答就基于什么
+  export RESUME_PDF_PATH="$ROOT_DIR/$RESUME_FILE"
+  if [ "$RESUME_FILE" = "$DEFAULT_RESUME_FILE" ]; then
+    # 提示还能用哪份简历（不给默认值，免得把文件名写进代码）
+    others="$(cd "$ROOT_DIR" && ls ./*.pdf 2>/dev/null | sed 's|^\./||' | grep -vxF "$DEFAULT_RESUME_FILE" | tr '\n' ' ')"
+    if [ -n "${others% }" ]; then
+      log "简历：${RESUME_FILE}（换成本地那份：RESUME_FILE=${others%% *} ./dev.sh）"
+    else
+      log "简历：${RESUME_FILE}"
+    fi
+  else
+    log "简历：${RESUME_FILE}（前端生成数据、后端 RAG 都用这一份）"
+  fi
+else
+  warn "找不到 ${ROOT_DIR}/${RESUME_FILE}，前端会退回兜底数据；用 RESUME_FILE 指定简历文件名"
+fi
+
 # ---------- 5. 端口预检 ----------
 check_port "$BACKEND_PORT" "后端" "BACKEND_PORT"
 check_port "$FRONTEND_PORT" "前端" "FRONTEND_PORT"

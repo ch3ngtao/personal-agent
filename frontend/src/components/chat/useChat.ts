@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { api, type ChatMessage, type RagSource } from '../../api/client'
+import { profile } from '../../data/resume'
 
 export type ChatRole = 'user' | 'assistant'
 /** 回答来源：faq = 简历知识库（RAG），chat = 纯 DeepSeek 对话。 */
@@ -47,7 +48,7 @@ const TOP_K = 5
 const SYSTEM_PROMPT: ChatMessage = {
   role: 'system',
   content:
-    '你是「示例用户」个人主页上的简历助手，负责回答来访者关于这份简历的问题：工作经历、项目经验、技术栈、教育背景、求职意向等。'
+    `你是「${profile.name}」个人主页上的简历助手，负责回答来访者关于这份简历的问题：工作经历、项目经验、技术栈、教育背景、求职意向等。`
     + '回答用简体中文，简洁分点；简历里没有的信息不要编造，直接说明不清楚并引导对方换个问法。',
 }
 
