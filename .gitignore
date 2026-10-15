@@ -26,7 +26,22 @@ __pycache__/
 
 # 部署配置与本地导出的镜像包（含服务器地址，不要提交）
 deploy.conf
+deploy.*.conf
 /ch3ngtao-images.tgz
+
+# 简历 PDF：只把对外那份（简历-李四.pdf）放进仓库，
+# 自己的真实简历留在本地 / 服务器，不进版本库（构建时按 RESUME_FILE 找）
+/*.pdf
+!/简历-李四.pdf
+
+# 构建时由 scripts/generate-resume-data.mjs 生成的简历数据与缓存
+frontend/src/data/resume.generated.ts
+frontend/src/data/resume.meta.json
+frontend/src/data/.resume-cache/
+
+# 各环境的环境变量文件（只提交示例）
+/env/*
+!/env/*.example
 
 # Local model / data caches（限定仓库根目录，避免误伤 frontend/src/data 之类的源码目录）
 /data/

@@ -30,7 +30,14 @@ class Settings(BaseSettings):
     preload_embedding_model: bool = False
 
     # ---- 简历 RAG（FAQ 问答）----
-    # 简历 PDF 路径。留空时会自动在仓库根目录、backend/data、backend 目录下找第一个 PDF。
+    # 简历主人的称呼：助手提示词里用到的名字。对外环境填对外那份简历上的名字，
+    # 自己的环境填自己的名字（两个环境各有一份 .env）
+    resume_name: str = "李四"
+    # 简历文件名（相对仓库根目录 / backend 目录，也可以写绝对路径）。
+    # 部署时由 compose 从 .env 注入，代码里不写死用哪份简历。
+    resume_file: str | None = None
+    # 简历 PDF 路径（比 RESUME_FILE 更优先，一般由容器里的挂载路径给出）。
+    # 都留空时才在仓库根目录、backend/data、backend 目录下按名字找 PDF。
     resume_pdf_path: str | None = None
     # RAG 专用的向量模型（中文简历建议用中文模型）。留空则复用上面的 EMBEDDING_MODEL。
     rag_embedding_model: str | None = "BAAI/bge-small-zh-v1.5"

@@ -1,0 +1,19 @@
+# 这个环境不直接对外：前面还有一层入口 nginx 负责 HTTPS，
+# 自己只监听 80，供入口转发（也能在本机用 curl 做健康检查）。
+server {
+    listen 80;
+    server_name {{SERVER_NAME}};
+
+    location /.well-known/acme-challenge/ {
+        root /usr/share/nginx/html;
+    }
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript application/xml;
+    gzip_min_length 1024;
+
+    include /etc/nginx/snippets/app-locations.inc;
+}

@@ -1,20 +1,31 @@
+# 一份 compose 跑两个环境：靠每个部署目录里的 .env 区分（简历、域名、端口、镜像名）。
+#   入口环境（自己的，ch3ngtao.top）：HTTP_ONLY=0，自己收 HTTPS
+#   对外环境（李四的，lisi.ch3ngtao.top）：HTTP_ONLY=1，只监听 80，由入口环境转发
+# 两个环境目录不同 → compose 项目名不同 → 容器、卷、网络互相独立。
+
 services:
   api:
     build:
       context: ./backend
-      args:
-        # uv 镜像来源。国内服务器可在根目录 .env 里改成 ghcr 加速地址
-        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:latest}
-    image: ch3ngtao-web-api
+      # 用宿主机网络构建：这台服务器上 Docker 默认网桥访问外网只有几十 KB/s，
+      # 走 host 网络能稳定跑到几 MB/s，构建（uv sync / npm ci）快很多
+      network: host
+    # 镜像名按环境区分：两个环境的前端镜像是按各自简历生成的，不能串
+    image: ${IMAGE_PREFIX:-ch3ngtao-web}-api
     environment:
       ENVIRONMENT: production
-      CORS_ORIGINS: '["https://ch3ngtao.top","https://www.ch3ngtao.top"]'
+      CORS_ORIGINS: '${CORS_ORIGINS:-["https://ch3ngtao.top","https://www.ch3ngtao.top"]}'
       # 容器基础镜像默认 UTC：TZ 管日志时间戳，TIMEZONE 管注入给模型的时间
       TZ: ${TZ:-Asia/Shanghai}
       TIMEZONE: ${TIMEZONE:-Asia/Shanghai}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       PRELOAD_EMBEDDING_MODEL: ${PRELOAD_EMBEDDING_MODEL:-false}
+      # 用哪份简历由 .env 的 RESUME_FILE 决定（两个环境各写自己那份），代码里不写死。
+      # 容器里路径固定，由下面的挂载把对应文件放进来。
+      RESUME_FILE: ${RESUME_FILE:-简历-李四.pdf}
       RESUME_PDF_PATH: ${RESUME_PDF_PATH:-/app/resume.pdf}
+      # 助手提示词里的称呼（对外环境是「李四」，自己的环境是自己）
+      RESUME_NAME: ${RESUME_NAME:-李四}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
       RAG_TOP_K: ${RAG_TOP_K:-5}
       RAG_SECTION_AWARE: ${RAG_SECTION_AWARE:-true}
@@ -29,30 +40,64 @@ services:
       # 在根目录 .env 里设 HF_ENDPOINT=https://hf-mirror.com 即可
       HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
     ports:
-      # 只绑本机：后端不再对外暴露，全部流量走 nginx 的 HTTPS
-      - "127.0.0.1:8000:8000"
+      # 只绑本机：后端不对外暴露，全部流量走 nginx。
+      # 两个环境在同一台机器上时 API_PORT 要错开（如 8000 / 8001）
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       # 缓存 HuggingFace 权重，重建容器不用重新下载
       - hf-cache:/models
       # 缓存切分后的 chunk 与向量，避免每次重建索引
       - rag-cache:/app/.cache
       # 简历 PDF 只读挂载进容器，供 RAG 切分使用
-      - ./简历-AI前端-示例用户.pdf:/app/resume.pdf:ro
+      - ./${RESUME_FILE:-简历-李四.pdf}:/app/resume.pdf:ro
     restart: unless-stopped
 
   web:
     build:
-      context: ./frontend
-    image: ch3ngtao-web-frontend
+      # 上下文是整个仓库：构建时要把根目录的简历 PDF 带进去
+      context: .
+      dockerfile: frontend/Dockerfile
+      network: host
+      args:
+        # 用哪份简历（仓库根目录的文件名），对外环境用仓库里那份，
+        # 自己的简历只在本地 / 服务器上，单独上传后再部署
+        RESUME_FILE: ${RESUME_FILE:-简历-李四.pdf}
+        RESUME_NAME: ${RESUME_NAME:-}
+        # 1 = 生成失败就让构建失败（自己的真实简历用这个，避免悄悄用错数据）
+        RESUME_GEN_STRICT: ${RESUME_GEN_STRICT:-0}
+        DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+        DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+        DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+    image: ${IMAGE_PREFIX:-ch3ngtao-web}-frontend
+    environment:
+      # 站点域名（入口模式写多个用空格分隔），以及要不要额外转发子域名
+      SERVER_NAME: ${SERVER_NAME:-ch3ngtao.top}
+      HTTP_ONLY: ${HTTP_ONLY:-0}
+      EXTRA_SERVER_NAME: ${EXTRA_SERVER_NAME:-}
+      EXTRA_UPSTREAM: ${EXTRA_UPSTREAM:-}
     ports:
-      - "80:80"
-      - "443:443"
+      # 80/443 只能被一个环境占用：入口环境用 80/443，
+      # 被转发的环境换端口（如 8081）并且只在本机监听
+      - "${WEB_BIND_IP:-0.0.0.0}:${WEB_HTTP_PORT:-80}:80"
+      - "${WEB_BIND_IP:-0.0.0.0}:${WEB_HTTPS_PORT:-443}:443"
     volumes:
       # 证书只读挂载进容器；续期时替换文件即可，无需重建镜像
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       - api
     restart: unless-stopped
+    networks:
+      default: {}
+      # 两个环境共用的网络：入口环境的 nginx 通过它转发到另一个环境的前端
+      edge:
+        aliases:
+          - ${WEB_EDGE_ALIAS:-web}
+
+networks:
+  edge:
+    # 由 deploy.sh 自动创建（docker network create ch3ngtao-edge）
+    external: true
+    name: ${EDGE_NETWORK:-ch3ngtao-edge}
 
 volumes:
   hf-cache:

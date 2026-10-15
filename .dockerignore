@@ -1,0 +1,33 @@
+# 前端镜像的构建上下文是仓库根目录（要把简历 PDF 一起带进去），
+# 这里把用不到的目录挡掉，避免上下文过大。
+.git
+.DS_Store
+.github
+.idea
+.vscode
+
+# Node / 前端产物
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Python / 后端
+backend/.venv
+backend/.cache
+backend/.pytest_cache
+backend/.ruff_cache
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# 证书、导出包、部署配置不进镜像
+certs
+*.tgz
+deploy*.conf
+
+# 环境变量文件（变量通过构建参数 / compose 注入）
+**/.env
+**/.env.*
+!**/.env.example

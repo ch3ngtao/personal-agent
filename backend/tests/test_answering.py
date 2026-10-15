@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.main import app
 from app.services import answering
 from app.services.rag import ResumeChunk
@@ -56,7 +57,7 @@ class _FakeLLM:
 
 
 def _chunks() -> list[ResumeChunk]:
-    return [ResumeChunk(index=0, content="2022.10-至今 示例科技 前端工程师", page=1, section="工作经历", score=0.9)]
+    return [ResumeChunk(index=0, content="2022.10-至今 XX 公司 前端工程师", page=1, section="工作经历", score=0.9)]
 
 
 @pytest.mark.parametrize(
@@ -116,7 +117,7 @@ async def test_plan_uses_chat_when_not_answerable() -> None:
     assert plan.sources == []
     assert index.calls == []  # 没有走简历 prompt
     system = plan.messages[0]["content"]
-    assert system.startswith("你是「示例用户」个人主页上的 AI 助手")
+    assert system.startswith(f"你是「{get_settings().resume_name}」个人主页上的 AI 助手")
     assert "现在是" in system
     # 注入到分钟，模型才能回答「现在几点」；只给日期的话它只能拒答
     assert re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", system)

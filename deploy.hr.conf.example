@@ -1,0 +1,21 @@
+# 自己的环境：./deploy.sh --env hr ...
+# 复制为 deploy.hr.conf 后按实际服务器改（不会被提交）
+
+DEPLOY_SSH=root@your-server-ip
+DEPLOY_PORT=22
+DEPLOY_DIR=/opt/ch3ngtao-web
+DEPLOY_KEY=
+
+# 环境变量文件（简历、域名、端口都在里面）
+DEPLOY_ENV_FILE=env/hr.env
+DEPLOY_SITE_URL=https://ch3ngtao.top
+
+# 自己的简历文件名（换成你的）；它不在 git 里，需要先 --upload-resume 传到服务器
+DEPLOY_RESUME_FILE=简历-示例.pdf
+
+# 国内服务器连不上 huggingface.co 时走镜像
+DEPLOY_HF_ENDPOINT=https://hf-mirror.com
+
+# 健康检查用的端口（要和 env/hr.env 里的端口一致）
+DEPLOY_WEB_PORT=80
+DEPLOY_API_PORT=8000

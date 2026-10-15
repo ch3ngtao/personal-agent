@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -45,6 +46,22 @@ def test_status_reports_resume_pdf(client: TestClient) -> None:
     assert body["ready"] is True
 
 
+def test_pdf_path_comes_from_config(tmp_path: Path) -> None:
+    """用哪份简历由配置决定，代码里只有兜底默认值。
+
+    RESUME_PDF_PATH 比 RESUME_FILE 优先；两个都不配才退回仓库里那份默认简历。
+    """
+    custom = tmp_path / "另一份简历.pdf"
+    custom.write_bytes(b"%PDF-1.4")
+
+    assert rag.ResumeIndex.resolve_pdf_path(None, str(custom)) == custom.resolve()
+    assert rag.ResumeIndex.resolve_pdf_path(str(custom), "简历-李四.pdf") == custom.resolve()
+
+    fallback = rag.ResumeIndex.resolve_pdf_path(None, None)
+    assert fallback is not None
+    assert fallback.name == rag.DEFAULT_PDF_NAME
+
+
 def test_chunks_are_split(client: TestClient, index_status: dict) -> None:
     body = client.get("/api/faq/chunks").json()
 
@@ -69,7 +86,7 @@ def test_chunks_carry_section_context(client: TestClient, index_status: dict) ->
     # 索引片段只列条目名，供「他最近在哪家公司」这类问题命中
     index_chunk = next(chunk for chunk in chunks if "·索引" in chunk["content"])
     assert index_chunk["section"] == "工作经历"
-    assert "示例科技" in index_chunk["content"]
+    assert "星垠智能科技" in index_chunk["content"]
     assert index_chunk["chars"] < index_status["chunk_size"]
 
 
@@ -79,7 +96,7 @@ def test_search_finds_current_employer(client: TestClient, index_status: dict) -
 
     matches = response.json()["matches"]
 
-    assert any("示例科技" in match["content"] for match in matches)
+    assert any("星垠智能科技" in match["content"] for match in matches)
 
 
 def test_search_covers_whole_section(client: TestClient, index_status: dict) -> None:
@@ -91,10 +108,10 @@ def test_search_covers_whole_section(client: TestClient, index_status: dict) -> 
     joined = "\n".join(match["content"] for match in matches)
 
     # 【项目经历】正文里的 4 个项目
-    for name in ("语音助手", "可视化报表平台", "电信 10000 号新门户系统", "Bazirim 电商 H5 商城"):
+    for name in ("智核 AI 平台", "云湃 SASS", "擎宇 SASS 平台", "XXXOA 平台"):
         assert name in joined
     # 末尾补充的【其他项目】也要带上，否则会漏掉一串项目
-    for name in ("示例科技产品门户", "物流系统", "供应商管理平台", "运营数据大屏"):
+    for name in ("智核 AI 开放平台", "云湃容器调度平台", "擎宇工单中台", "运营实时数据大屏"):
         assert name in joined
     # 整节返回，但不会把整份简历都塞进上下文
     assert 0 < len(matches) < index_status["chunks"]
@@ -136,7 +153,7 @@ def test_resume_prompt_injects_today() -> None:
     """简历链路也要告诉模型今天是几号，否则「2022.10-至今」判断不了是否在职。"""
     index = rag.get_resume_index()
 
-    messages = index.build_messages("他现在还在示例科技吗？", [])
+    messages = index.build_messages("他现在还在星垠智能科技吗？", [])
 
     assert clock.describe(with_time=False) in messages[0]["content"]
     assert "至今" in messages[0]["content"]

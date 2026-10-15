@@ -1,12 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# uv 的官方镜像在 ghcr.io，国内服务器拉取可能极慢（实测 20MB 要 20 多分钟）。
-# 可在根目录 .env 里改 UV_IMAGE 走镜像加速，例如：
-#   ghcr.m.daocloud.io/astral-sh/uv:latest
-#   ghcr.nju.edu.cn/astral-sh/uv:latest
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
-FROM ${UV_IMAGE} AS uv
-
+# 只用 Docker Hub 的 python:3.12-slim 作基础镜像，uv 用 pip 装（走 PyPI）。
+# 之前是 COPY --from=ghcr.io/astral-sh/uv 静态镜像，但国内各加速站
+# （ghcr.m.daocloud.io 等）经常 502，构建会因为拉不到 uv 直接失败；
+# uv 在 PyPI 上有官方 wheel（自带二进制），和 uv sync 用的是同一个源，更稳。
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -18,7 +15,8 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/models
 
-COPY --from=uv /uv /uvx /bin/
+# 需要固定版本时写成 pip install --no-cache-dir uv==0.12.16
+RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 

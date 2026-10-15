@@ -1,0 +1,18 @@
+# 对外环境（给外人看的）：./deploy.sh --env public ...
+# 复制为 deploy.public.conf 后按实际服务器改（不会被提交）
+
+DEPLOY_SSH=root@your-server-ip
+DEPLOY_PORT=22
+# 必须是另一个目录：compose 项目名取自目录名
+DEPLOY_DIR=/opt/ch3ngtao-public
+DEPLOY_KEY=
+
+DEPLOY_ENV_FILE=env/public.env
+DEPLOY_SITE_URL=https://lisi.ch3ngtao.top
+DEPLOY_RESUME_FILE=简历-李四.pdf
+
+DEPLOY_HF_ENDPOINT=https://hf-mirror.com
+
+# 健康检查用的端口（要和 env/public.env 里的端口一致）
+DEPLOY_WEB_PORT=8081
+DEPLOY_API_PORT=8001

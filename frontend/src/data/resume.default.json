@@ -1,0 +1,301 @@
+{
+  "profile": {
+    "name": "李四",
+    "title": "个人职业空间",
+    "icon": "💻",
+    "summary": "拥有 8 年后端研发经验，近 3 年担任后端技术负责人，长期深耕高并发分布式系统、云原生基础设施与 AI 工程化落地，主导过星垠智能语音中台、澜舟对话引擎、幻境数字人内容平台等核心系统的后端架构设计与落地，覆盖工作流编排、多模型推理网关、TTS 语音合成、RAG 检索增强、Agent 调度等关键链路；精通 Java / Go / Python 多语言技术栈，熟悉 Spring Cloud、Dubbo、gRPC、Kubernetes、Kafka、Redis、MySQL、ClickHouse、Elasticsearch 等主流后端与中间件生态，具备深厚的微服务治理、领域建模、性能调优与故障排查能力，曾负责中寰通信 10086 智能门户、星垠语音助手、澜舟文本助手等大型 To B / To C 系统的后端建设，支撑千万级用户访问、亿级消息流转与毫秒级响应的核心业务场景，擅长推动服务化、中台化、自动化、可观测性建设，落地过全链路压测、灰度发布、熔断限流、多活容灾、成本优化等专项工程，致力于用后端技术驱动业务效率与产品体验的持续跃迁。",
+    "gender": "男",
+    "age": 28,
+    "phone": "19999999992",
+    "email": "9999999992@email.com",
+    "intention": {
+      "position": "AI-Agent 开发",
+      "city": "北京",
+      "salary": "面议",
+      "type": "社招"
+    }
+  },
+  "skills": [
+    {
+      "id": "ai-app",
+      "category": "AI 应用开发",
+      "items": [
+        "数字人、算法、TTS、ASR 开发"
+      ]
+    },
+    {
+      "id": "llm",
+      "category": "大模型工程",
+      "items": [
+        "Dify、LiteLLM、Prompt 工程与评测",
+        "LangChain、LangGraph"
+      ]
+    },
+    {
+      "id": "backend",
+      "category": "后端核心",
+      "items": [
+        "Java / Go / Python",
+        "熟练 Spring Boot、Spring Cloud、Dubbo 与 Gin，了解 gRPC",
+        "MySQL、Redis、Kafka、Elasticsearch、ClickHouse"
+      ]
+    },
+    {
+      "id": "architecture",
+      "category": "架构与性能",
+      "items": [
+        "微服务治理、领域建模、分布式事务、高并发链路设计",
+        "全链路压测、熔断限流、灰度发布、多活容灾",
+        "JVM / GC 调优与接口性能优化"
+      ]
+    },
+    {
+      "id": "visual",
+      "category": "可视化与跨端",
+      "items": [
+        "Kubernetes、Docker、Istio、Jenkins CI/CD、Nginx 部署",
+        "Linux 常用命令、Git Flow 工作流、Code Review 与后端开发规范建设"
+      ]
+    },
+    {
+      "id": "observability",
+      "category": "可观测性与稳定性",
+      "items": [
+        "Prometheus + Grafana 监控告警",
+        "ELK 日志链路追踪、SkyWalking / OpenTelemetry",
+        "线上故障排查与 SLO 治理"
+      ]
+    },
+    {
+      "id": "data",
+      "category": "数据与中间件",
+      "items": [
+        "RAG 检索增强、向量数据库（Milvus / pgvector）",
+        "任务调度（XXL-JOB）、缓存与分库分表方案"
+      ]
+    },
+    {
+      "id": "other",
+      "category": "其他技能",
+      "items": [
+        "Charles、Proxyman 抓包工具使用"
+      ]
+    }
+  ],
+  "workExperiences": [
+    {
+      "id": "xingyin",
+      "period": "2022.10 - 至今",
+      "company": "星垠智能科技",
+      "role": "后端技术负责人",
+      "direction": "智能语音中台、对话引擎、智能客服、呼叫中心、数据中台、后端工程化",
+      "stack": [
+        "Java",
+        "Go",
+        "Python",
+        "Spring Cloud",
+        "Dubbo",
+        "gRPC",
+        "Kubernetes",
+        "Kafka",
+        "Redis",
+        "MySQL",
+        "ClickHouse",
+        "Elasticsearch",
+        "Dify",
+        "LiteLLM"
+      ],
+      "highlights": [
+        {
+          "label": "AI 产品后端（主导）",
+          "text": "负责对话式 AI 产品及企业级 To B 系统的后端研发与架构设计，主导智能语音中台、对话引擎的架构重构与核心链路实现，支撑日均千万级会话请求、峰值 QPS 2W+ 的稳定运行。"
+        },
+        {
+          "label": "大模型与数字人协作",
+          "text": "参与 Dify 工作流执行引擎对接、LiteLLM 多模型推理网关及数字人 TTS 合成服务的能力集成，落地多模型路由、限流计费与异步任务调度，推理链路平均延迟降低 40%。"
+        },
+        {
+          "label": "核心门户交付",
+          "text": "负责中寰通信 10086 智能门户等系统的服务端建设与性能优化，推动公共能力沉淀、接口规范与 Code Review 落地，负责后端服务拆分、网关治理及 JVM / GC 调优，核心接口 P99 从 800ms 降至 180ms，兼任后端技术负责人。"
+        }
+      ]
+    },
+    {
+      "id": "hanhai",
+      "period": "2020.03 - 2022.10",
+      "company": "瀚海数据技术",
+      "role": "高级后端工程师",
+      "direction": "电子商务",
+      "stack": [
+        "Java",
+        "Spring Cloud",
+        "Dubbo",
+        "MyBatis",
+        "MySQL",
+        "Redis",
+        "Kafka"
+      ],
+      "highlights": [
+        {
+          "label": "多端交付",
+          "text": "负责电商平台交易、商品、营销、支付等核心域的后端服务开发，支撑 H5 商城、微信小程序及 App 等多端业务，服务百万级注册用户、日订单量 10W+。"
+        },
+        {
+          "label": "后台重构与可视化",
+          "text": "参与商城管理后台重构，基于 Spring Cloud、Dubbo、MyBatis 等技术开发后台业务模块及数据报表服务，落地分库分表、缓存击穿防护与分布式事务方案，大促期间系统可用性保持 99.99%，并负责订单、库存、结算等系统的后端交付与稳定性保障。"
+        }
+      ]
+    },
+    {
+      "id": "yunshu",
+      "period": "2018.08 - 2019.12",
+      "company": "云枢科技",
+      "role": "后端开发工程师",
+      "direction": "企业服务（企业云平台）",
+      "stack": [
+        "Java",
+        "Spring Boot",
+        "MyBatis",
+        "Redis",
+        "MySQL",
+        "ECharts",
+        "AntV"
+      ],
+      "highlights": [
+        {
+          "label": "多端开发与组件化",
+          "text": "负责企业云平台用户中心、权限体系、资源调度及 API 网关的后端业务开发，基于 Spring Boot、MyBatis、Redis、MySQL 等技术实现核心服务与接口能力，支撑十万级企业租户的多租户隔离与权限治理；参与公共组件建设及 ECharts、AntV 数据可视化模块的数据服务开发，主导慢查询优化与缓存改造，核心接口响应提升 60%，积累企业级分布式应用与多系统集成经验。"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "zhihai-ai",
+      "period": "2023.05 - 至今",
+      "name": "智核 AI 平台",
+      "role": "后端负责人",
+      "description": "面向企业客户的 AI 能力中台，统一接入多模型推理、对话编排与语音合成能力。",
+      "stack": [
+        "Go",
+        "Java",
+        "Kubernetes",
+        "Kafka",
+        "Redis",
+        "gRPC",
+        "LiteLLM",
+        "Milvus"
+      ],
+      "highlights": [
+        {
+          "label": "推理网关建设",
+          "text": "主导多模型推理网关从 0 到 1 建设，统一封装 OpenAI、Claude、通义、文心 2.0 等模型接入协议，落地模型路由、配额计费、熔断降级与灰度切换能力，支撑日均千万级推理调用，网关 P99 延迟控制在 80ms 以内。"
+        },
+        {
+          "label": "对话编排引擎",
+          "text": "负责对话编排引擎后端设计，基于状态机与 DAG 调度实现多轮会话、函数调用、知识库检索与工作流执行，解决长会话上下文膨胀问题，单会话上下文存储成本降低 55%。"
+        },
+        {
+          "label": "向量检索服务",
+          "text": "主导 RAG 检索链路建设，基于 Milvus 与自研分片策略实现亿级向量检索，落地混合检索与重排序机制，检索召回率提升至 92%，平均检索耗时 45ms。"
+        }
+      ]
+    },
+    {
+      "id": "yunpai-saas",
+      "period": "2021.08 - 2023.04",
+      "name": "云湃 SASS",
+      "role": "高级后端工程师",
+      "description": "企业级云原生 PaaS 平台，提供容器调度、微服务治理与可观测性能力。",
+      "stack": [
+        "Go",
+        "Kubernetes",
+        "Istio",
+        "Prometheus",
+        "Jaeger",
+        "MySQL",
+        "Etcd"
+      ],
+      "highlights": [
+        {
+          "label": "调度平台开发",
+          "text": "负责容器调度平台核心模块开发，基于 Kubernetes Operator 实现应用一键部署、弹性伸缩与灰度发布，支撑五千+ 服务实例的稳定运行。"
+        },
+        {
+          "label": "服务治理",
+          "text": "参与微服务治理体系建设，落地限流、熔断、链路追踪与配置中心能力，核心服务可用性从 99.9% 提升至 99.99%。"
+        },
+        {
+          "label": "可观测性",
+          "text": "主导监控告警体系重构，基于 Prometheus + Grafana + Jaeger 实现全链路可观测，线上故障平均定位时间从 30 分钟缩短至 5 分钟。"
+        }
+      ]
+    },
+    {
+      "id": "qingyu-saas",
+      "period": "2019.06 - 2021.07",
+      "name": "擎宇 SASS 平台",
+      "role": "后端开发工程师",
+      "description": "面向中小企业的 SaaS 客服与工单系统。",
+      "stack": [
+        "Java",
+        "Spring Boot",
+        "RabbitMQ",
+        "Redis",
+        "MySQL",
+        "Elasticsearch"
+      ],
+      "highlights": [
+        {
+          "label": "工单系统",
+          "text": "负责工单流转、会话分配、消息通知等核心模块开发，基于 RabbitMQ 实现异步解耦与削峰填谷，支撑千家中小企业客户日常使用。"
+        },
+        {
+          "label": "搜索服务",
+          "text": "基于 Elasticsearch 实现工单与知识库全文检索，支持多条件组合查询与高亮展示，查询响应从 1.2s 降至 200ms。"
+        },
+        {
+          "label": "权限体系",
+          "text": "参与多租户权限模型设计，落地 RBAC 与数据隔离方案，支撑租户级配置与安全审计需求。"
+        }
+      ]
+    },
+    {
+      "id": "xxxoa",
+      "period": "2017.03 - 2019.05",
+      "name": "XXXOA 平台",
+      "role": "后端开发工程师",
+      "description": "企业级 OA 与审批流系统。",
+      "stack": [
+        "Java",
+        "Spring MVC",
+        "MyBatis",
+        "MySQL",
+        "Redis"
+      ],
+      "highlights": [
+        {
+          "label": "审批流引擎",
+          "text": "参与审批流引擎开发，支持多级审批、条件分支与流程回退，落地流程状态机与异步通知机制。"
+        },
+        {
+          "label": "性能优化",
+          "text": "主导慢查询治理与缓存改造，核心接口响应提升 60%，支撑十万级用户日常办公使用。"
+        },
+        {
+          "label": "接口规范",
+          "text": "参与接口规范制定与 Code Review，推动公共组件沉淀与后端开发规范落地。"
+        }
+      ]
+    }
+  ],
+  "otherProjects": "智核 AI 开放平台（多模型统一接入与计费网关，提出多租户配额与路由治理方案）、云湃容器调度平台（Kubernetes Operator，含弹性伸缩与灰度发布能力）、擎宇工单中台（Spring Boot / RabbitMQ，含异步派单与 SLA 超时预警）、启元审批流引擎（状态机驱动，支持多级审批与条件分支）、供应商协同平台（多租户数据隔离与权限治理）、运营实时数据大屏（Go + ClickHouse + WebSocket，支撑亿级数据秒级聚合展示）",
+  "educations": [
+    {
+      "id": "university",
+      "period": "2014.9 - 2018.7",
+      "school": "北京大学",
+      "degree": "统招本科 计算机科学"
+    }
+  ]
+}

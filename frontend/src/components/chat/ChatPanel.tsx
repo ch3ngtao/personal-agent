@@ -3,6 +3,7 @@ import { ClearOutlined, CloseOutlined, SendOutlined, StopOutlined } from '@ant-d
 import { Button, Input, Tooltip } from 'antd'
 import MessageBubble from './MessageBubble'
 import { QUICK_QUESTIONS, type ChatController, type ChatStatus } from './useChat'
+import { profile } from '../../data/resume'
 
 interface ChatPanelProps {
   chat: ChatController
@@ -100,7 +101,7 @@ export default function ChatPanel({ chat, open, onClose }: ChatPanelProps) {
       <div className="chat-body" ref={listRef}>
         {chat.turns.length === 0 ? (
           <div className="chat-welcome">
-            <div className="chat-welcome-title">你好，我是示例用户的简历助手 👋</div>
+            <div className="chat-welcome-title">你好，我是{profile.name}的简历助手 👋</div>
             <p className="chat-welcome-text">
               可以问我他的工作经历、项目经验、技术栈和求职意向，也可以随便聊聊。试试下面的问题：
             </p>
